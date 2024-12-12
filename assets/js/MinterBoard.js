@@ -273,13 +273,14 @@ async function loadCards() {
     cardsContainer.innerHTML = ""
     const pollResultsCache = {};
 
-    for (const card of response) {
-      const validCard = await validateCardStructure(card)
+    const validCards = response.filter(card => validateCardStructure(card));
+
+    for (const card of validCards) {
       const cardDataResponse = await qortalRequest({
         action: "FETCH_QDN_RESOURCE",
-        name: validCard.name,
+        name: card.name,
         service: "BLOG_POST",
-        identifier: validCard.identifier,
+        identifier: card.identifier,
       });
 
       const cardData = cardDataResponse;
@@ -445,7 +446,7 @@ async function createCardHTML(cardData, pollResults, cardIdentifier) {
   return `
   <div class="minter-card">
     <div class="minter-card-header">
-      <img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%;">
+      <img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; align-self: center;">
       <h3>${creator}</h3>
       <p>${header}</p>
     </div>

@@ -556,8 +556,9 @@ body {
 .minter-card {
   background-color: #1e1e2e; /* Dark background */
   flex: 1 1 calc(33%); 
-  min-width: 25rem; /* Ensure the card never gets smaller than 15rem */
-  max-width: calc(25% - 2rem); /* Prevent cards from growing larger than 1/4 */
+  min-width: 22rem; /* Ensure the card never gets smaller than 15rem */
+  max-width: 22rem;
+  /* max-width: calc(25% - 2rem);  */
   color: #ffffff;
   border: 1px solid #333;
   border-radius: 12px;
@@ -572,6 +573,10 @@ body {
 
 .minter-card:hover {
   transform: translateY(-5px); /* Slightly lift card on hover */
+}
+
+.minter-card img {
+  margin-left: 42%;
 }
 
 .minter-card-header h3 {
@@ -596,7 +601,10 @@ body {
   margin: 15px 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
+  align-content: stretch;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .minter-card-results h5 {
@@ -659,7 +667,7 @@ body {
   margin: 1rem 0; /* Add margin outside the section for spacing */
   font-size: 0.75em; /* Set the font size */
   line-height: 1.5; /* Optional: Adjust line spacing for better readability */
-  height: calc(1.5 * 1000 / 66 * 0.75em); /* Dynamically calculate height to fit 1000 characters */
+  height: calc(1.5 * 750 / 66 * 0.8em); /* Dynamically calculate height to fit 1000 characters */
   overflow-y: auto; /* Enable vertical scrolling if content overflows */
   border-radius: 8px; /* Optional: Add rounded corners */
   color: #f1f1f1; /* Optional: Light grey text color for readability */
@@ -717,7 +725,7 @@ body {
   color: #ffffff;
   border: none;
   border-radius: 8px;
-  padding: 1vh 2.5vh;
+  padding: 1vh 1.7rem;
   cursor: pointer;
   transition: background-color 0.3s;
 }
@@ -731,7 +739,7 @@ body {
   color: #ffffff;
   border: none;
   border-radius: 8px;
-  padding: 1.0vh 2.5vh;
+  padding: 1.0vh 1.7rem;
   cursor: pointer;
   transition: background-color 0.3s;
 }
@@ -745,7 +753,7 @@ body {
   color: #1e1e2e;
   border: none;
   border-radius: 8px;
-  padding: 1.0vh 1.5vh;
+  padding: 1.0vh 1.5rem;
   cursor: pointer;
   transition: background-color 0.3s;
 }
