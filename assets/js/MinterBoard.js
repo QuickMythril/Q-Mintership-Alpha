@@ -318,9 +318,9 @@ const calculatePollResults = (pollData, minterGroupMembers) => {
     const voterAddress = getAddressFromPublicKey(vote.voterPublicKey);
     const isAdmin = minterGroupMembers.some(member => member.member === voterAddress && member.isAdmin);
 
-    if (vote.optionIndex === 1) {
+    if (vote.optionIndex === 0) {
       isAdmin ? adminYes++ : memberAddresses.includes(voterAddress) ? minterYes++ : null;
-    } else if (vote.optionIndex === 0) {
+    } else if (vote.optionIndex === 1) {
       isAdmin ? adminNo++ : memberAddresses.includes(voterAddress) ? minterNo++ : null;
     }
   });
@@ -417,6 +417,21 @@ const displayComments = async (cardIdentifier) => {
   }
 };
 
+const voteYesOnPoll = async (poll) => {
+  await qortalRequest({
+    action: "VOTE_ON_POLL",
+    pollName: poll,
+    optionIndex: 0,
+  });
+}
+
+const voteNoOnPoll = async (poll) => {
+  await qortalRequest({
+    action: "VOTE_ON_POLL",
+    pollName: poll,
+    optionIndex: 1,
+  });
+}
 
 const toggleComments = async (cardIdentifier) => {
   const commentsSection = document.getElementById(`comments-section-${cardIdentifier}`);
@@ -476,9 +491,9 @@ async function createCardHTML(cardData, pollResults, cardIdentifier) {
     <div class="support-header"><h5>Support Minter?</h5></div> 
     <div class="actions">
       <div class="actions-buttons">
-        <button class="yes" onclick="voteOnPoll('${poll}', 'Yes')">YES</button>
+        <button class="yes" onclick="voteYesOnPoll('${poll}')">YES</button>
         <button class="comment" onclick="toggleComments('${cardIdentifier}')">COMMENTS</button>
-        <button class="no" onclick="voteOnPoll('${poll}', 'No')">NO</button>
+        <button class="no" onclick="voteNoOnPoll('${poll}')">NO</button>
       </div>
     </div>
     <div id="comments-section-${cardIdentifier}" class="comments-section" style="display: none; margin-top: 20px;">
