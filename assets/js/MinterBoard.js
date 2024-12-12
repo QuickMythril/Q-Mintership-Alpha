@@ -1,4 +1,5 @@
-const cardIdentifierPrefix = "test-board-card";
+const cardIdentifierPrefix = "test-board-card"
+// const cardIdentifierPrefix = "testMB-board-card";
 let isExistingCard = false;
 let existingCardData = {};
 let existingCardIdentifier ={};
@@ -273,11 +274,12 @@ async function loadCards() {
     const pollResultsCache = {};
 
     for (const card of response) {
+      const validCard = await validateCardStructure(card)
       const cardDataResponse = await qortalRequest({
         action: "FETCH_QDN_RESOURCE",
-        name: card.name,
+        name: validCard.name,
         service: "BLOG_POST",
-        identifier: card.identifier,
+        identifier: validCard.identifier,
       });
 
       const cardData = cardDataResponse;
@@ -428,6 +430,7 @@ const toggleComments = async (cardIdentifier) => {
 async function createCardHTML(cardData, pollResults, cardIdentifier) {
   const { header, content, links, creator, timestamp, poll } = cardData;
   const formattedDate = new Date(timestamp).toLocaleString();
+  const avatarUrl = `/arbitrary/THUMBNAIL/${creator}/qortal_avatar`;
   const linksHTML = links.map((link, index) => `
     <button onclick="window.open('${link}', '_blank')">
       ${`Link ${index + 1} - ${link}`}
@@ -442,6 +445,7 @@ async function createCardHTML(cardData, pollResults, cardIdentifier) {
   return `
   <div class="minter-card">
     <div class="minter-card-header">
+      <img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%;">
       <h3>${creator}</h3>
       <p>${header}</p>
     </div>
