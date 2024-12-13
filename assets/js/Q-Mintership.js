@@ -137,311 +137,282 @@ const renderPaginationControls = async(room, totalMessages, limit) => {
 // Main function to load the full content of the room, along with all main functionality -----------------------------------
 const loadRoomContent = async (room) => {
   const forumContent = document.getElementById("forum-content");
-  if (forumContent) {
-    forumContent.innerHTML = `
-      <div class="room-content">
-        <h3 class="room-title" style="color: lightblue;">${room.charAt(0).toUpperCase() + room.slice(1)} Room</h3>
-        <div id="messages-container" class="messages-container"></div>
-        <div id="pagination-container" class="pagination-container" style="margin-top: 20px; text-align: center;"></div>
-        <div class="message-input-section">
-          <div id="toolbar" class="message-toolbar"></div>
-          <div id="editor" class="message-input"></div>
-          <div class="attachment-section">
-            <input type="file" id="file-input" class="file-input" multiple>
-            <label for="file-input" class="custom-file-input-button">Select Files</label>
-            <input type="file" id="image-input" class="image-input" multiple accept="image/*">
-            <label for="image-input" class="custom-image-input-button">Select IMAGES w/Preview</label>
-            <button id="add-images-to-publish-button" disabled>Add Images to Multi-Publish</button>
-            <div id="preview-container" style="display: flex; flex-wrap: wrap; gap: 10px;"></div>
-          </div>
-          <button id="send-button" class="send-button">Publish</button>
+
+  if (!forumContent) {
+    console.error("Forum content container not found!");
+    return;
+  }
+
+  // Set initial content
+  forumContent.innerHTML = `
+    <div class="room-content">
+      <h3 class="room-title" style="color: lightblue;">${room.charAt(0).toUpperCase() + room.slice(1)} Room</h3>
+      <div id="messages-container" class="messages-container"></div>
+      <div id="pagination-container" class="pagination-container" style="margin-top: 20px; text-align: center;"></div>
+      <div class="message-input-section">
+        <div id="toolbar" class="message-toolbar"></div>
+        <div id="editor" class="message-input"></div>
+        <div class="attachment-section">
+          <input type="file" id="file-input" class="file-input" multiple>
+          <label for="file-input" class="custom-file-input-button">Select Files</label>
+          <input type="file" id="image-input" class="image-input" multiple accept="image/*">
+          <label for="image-input" class="custom-image-input-button">Select IMAGES w/Preview</label>
+          <button id="add-images-to-publish-button" disabled>Add Images to Multi-Publish</button>
+          <div id="preview-container" style="display: flex; flex-wrap: wrap; gap: 10px;"></div>
         </div>
+        <button id="send-button" class="send-button">Publish</button>
       </div>
-    `;
+    </div>
+  `;
 
-    const imageModalHTML = `
-      <div id="image-modal" class="image-modal">
-          <span id="close-modal" class="close">&times;</span>
-          <img id="modal-image" class="modal-content">
-          <div id="caption" class="caption"></div>
-          <button id="download-button" class="download-button">Download</button>
-      </div>
-    `;
-    forumContent.insertAdjacentHTML('beforeend', imageModalHTML);
+  // Add modal for image preview
+  forumContent.insertAdjacentHTML(
+    'beforeend',
+    `
+    <div id="image-modal" class="image-modal">
+        <span id="close-modal" class="close">&times;</span>
+        <img id="modal-image" class="modal-content">
+        <div id="caption" class="caption"></div>
+        <button id="download-button" class="download-button">Download</button>
+    </div>
+  `);
 
-    // Initialize Quill editor for rich text input
-    const quill = new Quill('#editor', {
-      theme: 'snow',
-      modules: {
-        toolbar: [
-          [{ 'font': [] }], // Add font family options
-          [{ 'size': ['small', false, 'large', 'huge'] }], // Add font size options
-          [{ 'header': [1, 2, false] }],
-          ['bold', 'italic', 'underline'], // Text formatting options
-          [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-          ['link', 'blockquote', 'code-block'],
-          [{ 'color': [] }, { 'background': [] }], // Text color and background color options
-          [{ 'align': [] }], // Text alignment
-          ['clean'] // Remove formatting button
-        ]
-      }
-    });
+  initializeQuillEditor();
+  setupModalHandlers();
+  setupFileInputs(room);
+  await loadMessagesFromQDN(room, currentPage);
+};
 
-    // Load messages from QDN for the selected room
-    await loadMessagesFromQDN(room, currentPage);
+// Initialize Quill editor
+const initializeQuillEditor = () => {
+  new Quill('#editor', {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        [{ 'font': [] }],
+        [{ 'size': ['small', false, 'large', 'huge'] }],
+        [{ 'header': [1, 2, false] }],
+        ['bold', 'italic', 'underline'],
+        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+        ['link', 'blockquote', 'code-block'],
+        [{ 'color': [] }, { 'background': [] }],
+        [{ 'align': [] }],
+        ['clean']
+      ]
+    }
+  });
+};
 
-    document.addEventListener("click", async (event) => {
-      if (event.target.classList.contains("inline-image")) {
-        const modal = document.getElementById("image-modal");
-        const modalImage = document.getElementById("modal-image");
-        const caption = document.getElementById("caption");
-        // const downloadButton = document.getElementById("download-button");
-    
-        // Set the modal content
-        modalImage.src = event.target.src;
-        caption.textContent = event.target.alt;
-    
-        // Show the modal
-        modal.style.display = "block";
-      }
-    });
-    
-    // Close the modal
-    document.getElementById("close-modal").addEventListener("click", async () => {
-      document.getElementById("image-modal").style.display = "none";
-    });
-    
-    // Hide the modal when clicking outside of the image or close button
-    window.addEventListener("click", async (event) => {
+// Set up modal behavior
+const setupModalHandlers = () => {
+  document.addEventListener("click", (event) => {
+    if (event.target.classList.contains("inline-image")) {
       const modal = document.getElementById("image-modal");
-      if (!event.target == modal) {
-        modal.style.display = "none";
-      }
-    });
-  
+      const modalImage = document.getElementById("modal-image");
+      const caption = document.getElementById("caption");
 
-    let selectedFiles = [];
-    let selectedImages = [];
-    let attachmentIdentifiers = [];
-    let multiResource = []
+      modalImage.src = event.target.src;
+      caption.textContent = event.target.alt;
+      modal.style.display = "block";
+    }
+  });
 
-    const imageFileInput = document.getElementById('image-input');
-    const previewContainer = document.getElementById('preview-container');
-    const addToPublishButton = document.getElementById('add-images-to-publish-button')
-    const randomID = await uid();
-    const attachmentID = `${messageAttachmentIdentifierPrefix}-${room}-${randomID}`;
+  document.getElementById("close-modal").addEventListener("click", () => {
+    document.getElementById("image-modal").style.display = "none";
+  });
 
-    imageFileInput.addEventListener('change', async (event) => {
-      // Clear previous previews to prepare for preview generation
-      previewContainer.innerHTML = '';
-      selectedImages = Array.from(event.target.files);
+  window.addEventListener("click", (event) => {
+    const modal = document.getElementById("image-modal");
+    if (event.target === modal) {
+      modal.style.display = "none";
+    }
+  });
+};
 
-      if (selectedImages.length > 0) {
-        addToPublishButton.disabled = false;
-      }
+let selectedImages = [];
+let selectedFiles = [];
+let multiResource = [];
+let attachmentIdentifiers = [];
 
-      selectedImages.forEach((file, index) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const img = document.createElement('img');
-          img.src = reader.result;
-          img.alt = file.name;
-          img.style.width = '100px';
-          img.style.height = '100px';
-          img.style.objectFit = 'cover';
-          img.style.border = '1px solid #ccc';
-          img.style.borderRadius = '5px';
+// Set up file input handling
+const setupFileInputs = (room) => {
+  const imageFileInput = document.getElementById('image-input');
+  const previewContainer = document.getElementById('preview-container');
+  const addToPublishButton = document.getElementById('add-images-to-publish-button');
+  const fileInput = document.getElementById('file-input');
+  const sendButton = document.getElementById('send-button');
 
-          // Add remove button
-          const removeButton = document.createElement('button');
-          removeButton.innerText = 'Remove';
-          removeButton.style.marginTop = '5px';
-          removeButton.onclick = () => {
-            selectedImages.splice(index, 1);
-            img.remove();
-            removeButton.remove();
-            if (selectedImages.length === 0) {
-              addToPublishButton.disabled = true;
-            }
-          };
+  const attachmentID = generateAttachmentID(room);
 
-          const container = document.createElement('div');
-          container.style.display = 'flex';
-          container.style.flexDirection = 'column';
-          container.style.alignItems = 'center';
-          container.style.margin = '5px';
-          container.appendChild(img);
-          container.appendChild(removeButton);
-          previewContainer.appendChild(container);
+  imageFileInput.addEventListener('change', (event) => {
+    previewContainer.innerHTML = '';
+    selectedImages = [...event.target.files];
+
+    addToPublishButton.disabled = selectedImages.length === 0;
+
+    selectedImages.forEach((file, index) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = document.createElement('img');
+        img.src = reader.result;
+        img.alt = file.name;
+        img.style = "width: 100px; height: 100px; object-fit: cover; border: 1px solid #ccc; border-radius: 5px;";
+
+        const removeButton = document.createElement('button');
+        removeButton.innerText = 'Remove';
+        removeButton.classList.add('remove-image-button');
+        removeButton.onclick = () => {
+          selectedImages.splice(index, 1);
+          img.remove();
+          removeButton.remove();
+          addToPublishButton.disabled = selectedImages.length === 0;
         };
-        reader.readAsDataURL(file);
-      });
+
+        const container = document.createElement('div');
+        container.style = "display: flex; flex-direction: column; align-items: center; margin: 5px;";
+        container.append(img, removeButton);
+        previewContainer.append(container);
+      };
+      reader.readAsDataURL(file);
     });
+  });
 
-    addToPublishButton.addEventListener('click', async () => {
-      await addImagesToMultiPublish()
-    })
+  addToPublishButton.addEventListener('click', () => {
+    processSelectedImages(selectedImages, multiResource, room);
+    selectedImages = [];
+    addToPublishButton.disabled = true;
+  });
 
-    // Function to add images in the preview to the multi-publish object --------------------------
-    const addImagesToMultiPublish = async () => {
-      console.log('Adding Images to multi-publish:', selectedImages);
-      for (let i = 0; i < selectedImages.length; i++) {
-        const file = selectedImages[i];
-        try {
-          multiResource.push({
-            name: userState.accountName,
-            service: "FILE",
-            identifier: attachmentID,
-            file: file,
-          });
-      
-          attachmentIdentifiers.push({
-            name: userState.accountName,
-            service: "FILE",
-            identifier: attachmentID,
-            filename: file.name,
-            mimeType: file.type
-          });
-      
-          console.log(`Attachment ${file.name} placed into multiResource with attachmentID: ${attachmentID}`);
-      
-          // Remove the processed file
-          selectedImages.splice(i, 1);
-          i--; // Adjust the index since we removed an item
-          
-        } catch (error) {
-          console.error(`Error processing attachment ${file.name}:`, error);
-        }
-      }
-      selectedImages = []
-      addToPublishButton.disabled = true
+  fileInput.addEventListener('change', (event) => {
+    selectedFiles = [...event.target.files];
+  });
+
+  sendButton.addEventListener('click', async () => {
+    const quill = new Quill('#editor');
+    const messageHtml = quill.root.innerHTML.trim();
+
+    if (messageHtml || selectedFiles.length > 0 || selectedImages.length > 0) {
+      await handleSendMessage(room, messageHtml, selectedFiles, selectedImages, multiResource);
+    }
+  });
+};
+
+// Process selected images
+const processSelectedImages = async (selectedImages, multiResource, room) => {
+  
+  for (const file of selectedImages) {
+    let attachmentID = generateAttachmentID(room, selectedImages.indexOf(file))
+    try {
+      multiResource.push({
+        name: userState.accountName,
+        service: "FILE",
+        identifier: attachmentID,
+        file
+      });
+      attachmentIdentifiers.push({
+        name: userState.accountName,
+        service: "FILE",
+        identifier: attachmentID,
+        filename: file.name,
+        mimeType: file.type
+      })
+    } catch (error) {
+      console.error(`Error processing image ${file.name}:`, error);
+    }
+  }
+};
+
+// Handle send message
+const handleSendMessage = async (room, messageHtml, selectedFiles, selectedImages, multiResource) => {
+  const messageIdentifier = `${messageIdentifierPrefix}-${room}-${Date.now()}`;
+
+  try {
+    if (selectedImages.length > 0) {
+      await processSelectedImages(selectedImages, multiResource, room);
     }
 
-    // Add event listener to handle file selection
-    document.getElementById('file-input').addEventListener('change', async (event) => {
-      selectedFiles = Array.from(event.target.files);
+    for (const file of selectedFiles) {
+      let attachmentID = generateAttachmentID(room, selectedFiles.indexOf(file))
+      multiResource.push({
+        name: userState.accountName,
+        service: "FILE",
+        identifier: attachmentID,
+        file
+      });
+      attachmentIdentifiers.push({
+        name: userState.accountName,
+        service: "FILE",
+        identifier: attachmentID,
+        filename: file.name,
+        mimeType: file.type
+      })
+    }
+
+    const messageObject = {
+      messageHtml,
+      hasAttachment: multiResource.length > 0,
+      attachments: attachmentIdentifiers,
+      replyTo: replyToMessageIdentifier || null // Add replyTo
+    };
+
+    const base64Message = btoa(JSON.stringify(messageObject));
+
+    multiResource.push({
+      name: userState.accountName,
+      service: "BLOG_POST",
+      identifier: messageIdentifier,
+      data64: base64Message
     });
-    // Add event listener for the PUBLISH button
-    document.getElementById("send-button").addEventListener("click", async () => {
-      const messageHtml = quill.root.innerHTML.trim();
-      if (messageHtml !== "" || selectedFiles.length > 0 || selectedImages.length > 0) {
-        const messageIdentifier = `${messageIdentifierPrefix}-${room}-${randomID}`;
 
-        if (selectedImages.length > 0) {
-          await addImagesToMultiPublish()
-        }
-        if (selectedFiles.length === 1) {
-          console.log(`single file has been detected, attaching single file...`)
-          const singleAttachment = selectedFiles[0]
-          
-          multiResource.push({
-            name: userState.accountName,
-            service: "FILE",
-            identifier: attachmentID,
-            file: singleAttachment
-          })
+    await publishMultipleResources(multiResource);
 
-          attachmentIdentifiers.push({
-            name: userState.accountName,
-            service: "FILE",
-            identifier: attachmentID,
-            filename: singleAttachment.name,
-            filetype: singleAttachement.type
-          })
-          // Clear selectedFiles as we do not need them anymore.
-          document.getElementById('file-input').value = "";
-          selectedFiles = [];
-
-        }else if (selectedFiles.length >= 2) {
-          console.log(`selected files found: ${selectedFiles.length}, adding multiple files to multi-publish resource...`)
-        // Handle Multiple attachements utilizing multi-publish
-          for (let i = 0; i < selectedFiles.length; i++) {
-            const file = selectedFiles[i];
-            try {
-              multiResource.push({
-                name: userState.accountName,
-                service: "FILE",
-                identifier: attachmentID,
-                file: file,
-              });
-          
-              attachmentIdentifiers.push({
-                name: userState.accountName,
-                service: "FILE",
-                identifier: attachmentID,
-                filename: file.name,
-                mimeType: file.type
-              });
-          
-              console.log(`Attachment ${file.name} placed into multiResource with attachmentID: ${attachmentID}`);
-          
-              // Remove the processed file
-              selectedFiles.splice(i, 1);
-              i--; // Adjust the index since we removed an item
-            } catch (error) {
-              console.error(`Error processing attachment ${file.name}:`, error);
-            }
-          }
-        }
-      
-        // Create message object with unique identifier, HTML content, and attachments
-        const messageObject = {
-          messageHtml: messageHtml,
-          hasAttachment: attachmentIdentifiers.length > 0,
-          attachments: attachmentIdentifiers,
-          replyTo: replyToMessageIdentifier
-        };
-      
-        try {
-          // Convert message object to base64
-          let base64Message = await objectToBase64(messageObject);
-          if (!base64Message) {
-            console.log(`initial object creation with object failed, using btoa...`);
-            base64Message = btoa(JSON.stringify(messageObject));
-          }
-    
-          // Put the message into the multiResource for batch-publishing.
-          multiResource.push({
-            name: userState.accountName,
-            service: "BLOG_POST",
-            identifier: messageIdentifier,
-            data64: base64Message
-          });
-    
-          console.log("Message added to multi-publish resource successfully, attempting multi-publish... ");
-
-          await publishMultipleResources(multiResource)
-        
-          // Clear the editor after sending the message, including any potential attached files and replies.
-          quill.root.innerHTML = "";
-          document.getElementById('file-input').value = "";
-          selectedFiles = [];
-          selectedImages = [];
-          multiResource = [];
-          replyToMessageIdentifier = null;
-          const replyContainer = document.querySelector(".reply-container");
-          if (replyContainer) {
-            replyContainer.remove()
-          }
-
-          // Show success notification
-          const notification = document.createElement('div');
-          notification.innerText = "Message published successfully! Message will take a confirmation to show, please be patient...";
-          notification.style.color = "green";
-          notification.style.marginTop = "1em";
-          document.querySelector(".message-input-section").appendChild(notification);
-
-          setTimeout(() => {
-            notification.remove();
-          }, 10000);
-
-        } catch (error) {
-          console.error("Error publishing message:", error);
-        }
-      }
-    })
+    clearInputs();
+    showSuccessNotification();
+  } catch (error) {
+    console.error("Error sending message:", error);
   }
-}
+};
+
+// Modify clearInputs to reset replyTo
+const clearInputs = () => {
+  const quill = new Quill('#editor');
+  quill.root.innerHTML = "";
+  document.getElementById('file-input').value = "";
+  document.getElementById('image-input').value = "";
+  document.getElementById('preview-container').innerHTML = "";
+  replyToMessageIdentifier = null;
+  multiResource = [];
+  attachmentIdentifiers = [];
+  selectedImages = []
+  selectedFiles = []
+
+  const replyContainer = document.querySelector(".reply-container");
+  if (replyContainer) {
+    replyContainer.remove();
+  }
+};
+
+// Show success notification
+const showSuccessNotification = () => {
+  const notification = document.createElement('div');
+  notification.innerText = "Message published successfully! Please wait for confirmation.";
+  notification.style.color = "green";
+  notification.style.marginTop = "1em";
+  document.querySelector(".message-input-section").appendChild(notification);
+
+  setTimeout(() => {
+    notification.remove();
+  }, 10000);
+};
+
+// Generate unique attachment ID
+const generateAttachmentID = (room, fileIndex = null) => {
+  const baseID = `${messageAttachmentIdentifierPrefix}-${room}-${Date.now()}`;
+  return fileIndex !== null ? `${baseID}-${fileIndex}` : baseID;
+};
+
+
+
 
 const loadMessagesFromQDN = async (room, page, isPolling = false) => {
   try {
@@ -534,17 +505,17 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
         let attachmentHtml = "";
         if (message.attachments && message.attachments.length > 0) {
           for (const attachment of message.attachments) {
-            if (attachment.mimeType.startsWith('image/')) {
+            if (attachment.mimeType && attachment.mimeType.startsWith('image/')) {
               try {
-                // OTHER METHOD NOT BEING USED HERE. WE CAN LOAD THE IMAGE DIRECTLY SINCE IT WILL BE PUBLISHED UNENCRYPTED/UNENCODED.
-                // const imageHtml = await loadImageHtml(attachment.service, attachment.name, attachment.identifier, attachment.filename, attachment.mimeType);
+                // Construct the image URL
                 const imageUrl = `/arbitrary/${attachment.service}/${attachment.name}/${attachment.identifier}`;
         
                 // Add the image HTML with the direct URL
                 attachmentHtml += `<div class="attachment">
                   <img src="${imageUrl}" alt="${attachment.filename}" class="inline-image"/>
                 </div>`;
-                // Add the modal download button details as well, in order to pass correct information to the modal
+        
+                // Set up the modal download button
                 const downloadButton = document.getElementById("download-button");
                 downloadButton.onclick = () => {
                   fetchAndSaveAttachment(
@@ -555,19 +526,18 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
                     attachment.mimeType
                   );
                 };
-                // FOR OTHER METHOD NO LONGER USED
-                // attachmentHtml += imageHtml;
               } catch (error) {
                 console.error(`Failed to fetch attachment ${attachment.filename}:`, error);
               }
             } else {
-              // Display a button to download other attachments
+              // Display a button to download non-image attachments
               attachmentHtml += `<div class="attachment">
                 <button onclick="fetchAndSaveAttachment('${attachment.service}', '${attachment.name}', '${attachment.identifier}', '${attachment.filename}', '${attachment.mimeType}')">Download ${attachment.filename}</button>
               </div>`;
             }
           }
         }
+        
 
         const avatarUrl = `/arbitrary/THUMBNAIL/${message.name}/qortal_avatar`;
         const messageHTML = `

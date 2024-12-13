@@ -494,7 +494,7 @@ const toggleComments = async (cardIdentifier) => {
 const createModal = async () => {
   const modalHTML = `
     <div id="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000;">
-      <div style="position: relative; margin: 5% auto; width: 90%; height: 90%; background: white; border-radius: 10px; overflow: hidden;">
+      <div style="position: relative; margin: 10% auto; width: 95%; height: 80%; background: white; border-radius: 10px; overflow: hidden;">
         <iframe id="modalContent" src="" style="width: 100%; height: 100%; border: none;"></iframe>
         <button onclick="closeModal()" style="position: absolute; top: 10px; right: 10px; background: red; color: white; border: none; padding: 5px 10px; border-radius: 5px;">Close</button>
       </div>
@@ -522,9 +522,16 @@ const closeModal = async () => {
 
 const processLink = async (link) => {
   if (link.startsWith('qortal://')) {
-    return link.replace('qortal://', '/render/')
+    const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/);
+    if (match) {
+      const firstParam = match[1].toUpperCase(); // Convert to uppercase
+      const remainingPath = match[2] || ""; // Rest of the URL
+      // Perform any asynchronous operation if necessary
+      await new Promise(resolve => setTimeout(resolve, 10)); // Simulating async operation
+      return `http://localhost:12391/render/${firstParam}${remainingPath}`;
+    }
   }
-  return link // Return the link unchanged if it doesn't start with `qortal://`
+  return link; // Return unchanged if not a Qortal link
 }
 
 

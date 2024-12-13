@@ -384,6 +384,16 @@
   background-color: rgba(0, 0, 0, 0.8); /* Black w/ opacity */
 }
 
+.remove-image-button {
+   background-color: #0f4c41;
+    color: #ffffff;
+    border: dotted;
+    border-radius: 1vh;
+    padding: 0.3vh 0.6vh;
+    margin-top: 1px;
+    cursor: pointer;
+}
+
 .modal-content {
   margin: auto;
   display: block;
