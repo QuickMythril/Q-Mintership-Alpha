@@ -107,6 +107,14 @@
   color: white
 }
 
+.new-indicator {
+  margin-left: 1.25rem;
+  color: red;
+  font-weight: bold;
+  font-size: 1.25rem; /* Adjust size as needed */
+}
+
+
   .message-header.username {
   color: #1b8fc4;
 }

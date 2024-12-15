@@ -1,5 +1,6 @@
 const messageIdentifierPrefix = `mintership-forum-message`;
 const messageAttachmentIdentifierPrefix = `mintership-forum-attachment`;
+let adminPublicKeys = []
 
 // NOTE - SET adminGroups in QortalApi.js to enable admin access to forum for specific groups. Minter Admins will be fetched automatically.
 
@@ -42,14 +43,25 @@ const loadForumPage = async () => {
         }
     }
 
+    if (typeof userState.isAdmin === 'undefined') {
+      try {
+        // Fetch and verify the admin status asynchronously
+        userState.isAdmin = await verifyUserIsAdmin();
+      } catch (error) {
+        console.error('Error verifying admin status:', error);
+        userState.isAdmin = false; // Default to non-admin if there's an issue
+      }
+    }
+
   const avatarUrl = `/arbitrary/THUMBNAIL/${userState.accountName}/qortal_avatar`;
+  const isAdmin = userState.isAdmin;
   
-  // Create the forum layout, including a header, sub-menu, and keeping the original background imagestyle="background-image: url('/assets/images/background.jpg');">
+  // Create the forum layout, including a header, sub-menu, and keeping the original background image: style="background-image: url('/assets/images/background.jpg');">
   const mainContent = document.createElement('div');
   mainContent.innerHTML = `
     <div class="forum-main mbr-parallax-background cid-ttRnlSkg2R">
       <div class="forum-header" style="color: lightblue; display: flex; justify-content: center; align-items: center; padding: 10px;">
-        <div class="user-info" style="border: 1px solid lightblue; padding: 5px; color: lightblue; display: flex; align-items: center; justify-content: center;">
+        <div class="user-info" style="border: 1px solid lightblue; padding: 5px; color: white; display: flex; align-items: center; justify-content: center;">
           <img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; margin-right: 10px;">
           <span>${userState.accountName || 'Guest'}</span>
         </div>
@@ -57,7 +69,7 @@ const loadForumPage = async () => {
       <div class="forum-submenu">
         <div class="forum-rooms">
           <button class="room-button" id="minters-room">Minters Room</button>
-          ${userState.isAdmin ? '<button class="room-button" id="admins-room">Admins Room</button>' : ''}
+          ${isAdmin ? '<button class="room-button" id="admins-room">Admins Room</button>' : ''}
           <button class="room-button" id="general-room">General Room</button>
         </div>
       </div>
@@ -85,7 +97,7 @@ const loadForumPage = async () => {
 }
 
 // Function to add the pagination buttons and related control mechanisms ------------------------
-const renderPaginationControls = async(room, totalMessages, limit) => {
+const renderPaginationControls = (room, totalMessages, limit) => {
   const paginationContainer = document.getElementById("pagination-container");
   if (!paginationContainer) return;
 
@@ -301,77 +313,118 @@ const setupFileInputs = (room) => {
 const processSelectedImages = async (selectedImages, multiResource, room) => {
   
   for (const file of selectedImages) {
-    let attachmentID = generateAttachmentID(room, selectedImages.indexOf(file))
-    try {
-      multiResource.push({
-        name: userState.accountName,
-        service: "FILE",
-        identifier: attachmentID,
-        file
-      });
-      attachmentIdentifiers.push({
-        name: userState.accountName,
-        service: "FILE",
-        identifier: attachmentID,
-        filename: file.name,
-        mimeType: file.type
-      })
-    } catch (error) {
-      console.error(`Error processing image ${file.name}:`, error);
-    }
+    const attachmentID = generateAttachmentID(room, selectedImages.indexOf(file));
+  
+    multiResource.push({
+      name: userState.accountName,
+      service: room === "admins" ? "FILE_PRIVATE" : "FILE",
+      identifier: attachmentID,
+      file: file, // Use encrypted file for admins
+    });
+  
+    attachmentIdentifiers.push({
+      name: userState.accountName,
+      service: room === "admins" ? "FILE_PRIVATE" : "FILE",
+      identifier: attachmentID,
+      filename: file.name,
+      mimeType: file.type,
+    });
   }
 };
 
 // Handle send message
 const handleSendMessage = async (room, messageHtml, selectedFiles, selectedImages, multiResource) => {
-  const messageIdentifier = `${messageIdentifierPrefix}-${room}-${Date.now()}`;
+  const messageIdentifier = room === "admins"
+    ? `${messageIdentifierPrefix}-${room}-e-${Date.now()}`
+    : `${messageIdentifierPrefix}-${room}-${Date.now()}`;
+
+  const adminPublicKeys = room === "admins" && userState.isAdmin
+    ? await fetchAdminGroupsMembersPublicKeys()
+    : [];
 
   try {
+    // Process selected images
     if (selectedImages.length > 0) {
       await processSelectedImages(selectedImages, multiResource, room);
     }
 
-    for (const file of selectedFiles) {
-      let attachmentID = generateAttachmentID(room, selectedFiles.indexOf(file))
-      multiResource.push({
-        name: userState.accountName,
-        service: "FILE",
-        identifier: attachmentID,
-        file
-      });
-      attachmentIdentifiers.push({
-        name: userState.accountName,
-        service: "FILE",
-        identifier: attachmentID,
-        filename: file.name,
-        mimeType: file.type
-      })
+    // Process selected files
+    if (selectedFiles && selectedFiles.length > 0) {
+      for (const file of selectedFiles) {
+        const attachmentID = generateAttachmentID(room, selectedFiles.indexOf(file));
+
+        multiResource.push({
+          name: userState.accountName,
+          service: room === "admins" ? "FILE_PRIVATE" : "FILE",
+          identifier: attachmentID,
+          file: file, // Use encrypted file for admins
+        });
+
+        attachmentIdentifiers.push({
+          name: userState.accountName,
+          service: room === "admins" ? "FILE_PRIVATE" : "FILE",
+          identifier: attachmentID,
+          filename: file.name,
+          mimeType: file.type,
+        });
+      }
     }
 
+    // Build the message object
     const messageObject = {
       messageHtml,
       hasAttachment: multiResource.length > 0,
       attachments: attachmentIdentifiers,
-      replyTo: replyToMessageIdentifier || null // Add replyTo
+      replyTo: replyToMessageIdentifier || null, // Include replyTo if applicable
     };
 
-    const base64Message = btoa(JSON.stringify(messageObject));
+    // Encode the message object
+    let base64Message = await objectToBase64(messageObject);
+    if (!base64Message) {
+      base64Message = btoa(JSON.stringify(messageObject));
+    }
 
-    multiResource.push({
-      name: userState.accountName,
-      service: "BLOG_POST",
-      identifier: messageIdentifier,
-      data64: base64Message
-    });
+    if (room === "admins" && userState.isAdmin) {
+      console.log("Encrypting message for admins...");
+      
+      multiResource.push({
+        name: userState.accountName,
+        service: "MAIL_PRIVATE",
+        identifier: messageIdentifier,
+        data64: base64Message,
+      });
+    } else {
+      multiResource.push({
+        name: userState.accountName,
+        service: "BLOG_POST",
+        identifier: messageIdentifier,
+        data64: base64Message,
+      });
+    }
 
-    await publishMultipleResources(multiResource);
+    // Publish resources
+    if (room === "admins") {
+      if (!userState.isAdmin || adminPublicKeys.length === 0) {
+        console.error("User is not an admin or no admin public keys found. Aborting publish.");
+        window.alert("You are not authorized to post in the Admin room.");
+        return;
+      }
+      console.log("Publishing encrypted resources for Admin room...");
+      await publishMultipleResources(multiResource, adminPublicKeys, true);
+    } else {
+      console.log("Publishing resources for non-admin room...");
+      await publishMultipleResources(multiResource);
+    }
 
+    // Clear inputs and show success notification
     clearInputs();
     showSuccessNotification();
   } catch (error) {
     console.error("Error sending message:", error);
   }
 };
+
+
 
 // Modify clearInputs to reset replyTo
 const clearInputs = () => {
@@ -407,11 +460,31 @@ const showSuccessNotification = () => {
 
 // Generate unique attachment ID
 const generateAttachmentID = (room, fileIndex = null) => {
-  const baseID = `${messageAttachmentIdentifierPrefix}-${room}-${Date.now()}`;
+  const baseID = room === "admins" ? `${messageAttachmentIdentifierPrefix}-${room}-e-${Date.now()}` : `${messageAttachmentIdentifierPrefix}-${room}-${Date.now()}`;
   return fileIndex !== null ? `${baseID}-${fileIndex}` : baseID;
 };
 
+const decryptObject = async (encryptedData) => {
+  // const publicKey = await getPublicKeyFromAddress(userState.accountAddress)
+  const response = await qortalRequest({
+    action: 'DECRYPT_DATA',
+    encryptedData, // has to be in base64 format
+    // publicKey: publisherPublicKey  // requires the public key of the opposite user with whom you've created the encrypted data. For DIRECT messages only.
+  });
+  const decryptedObject = response
+  return decryptedObject
+}
 
+const decryptFile = async (encryptedData) => {
+  const publicKey = await getPublicKeyByName(userState.accountName)
+  const response = await qortalRequest({
+    action: 'DECRYPT_DATA',
+    encryptedData, // has to be in base64 format
+    // publicKey: publicKey  // requires the public key of the opposite user with whom you've created the encrypted data.
+  });
+  const decryptedObject = response
+  return decryptedObject
+}
 
 
 const loadMessagesFromQDN = async (room, page, isPolling = false) => {
@@ -434,7 +507,10 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
     existingIdentifiers = new Set(Array.from(messagesContainer.querySelectorAll('.message-item')).map(item => item.dataset.identifier));
 
     // Fetch messages for the current room and page
-    const response = await searchAllWithOffset(`${messageIdentifierPrefix}-${room}`, limit, offset);
+    const service = room === "admins" ? "MAIL_PRIVATE" : "BLOG_POST"
+    const query = room === "admins" ? `${messageIdentifierPrefix}-${room}-e` : `${messageIdentifierPrefix}-${room}`
+    
+    const response = await searchAllWithOffset(service, query, limit, offset, room);
     console.log(`Fetched messages count: ${response.length} for page: ${page}`);
 
     if (response.length === 0) {
@@ -447,46 +523,82 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
 
     // Define `mostRecentMessage` to track the latest message during this fetch
     let mostRecentMessage = latestMessageIdentifiers[room]?.latestTimestamp ? latestMessageIdentifiers[room] : null;
+    let firstNewMessageIdentifier = null
 
     // Fetch all messages that haven't been fetched before
     const fetchMessages = await Promise.all(response.map(async (resource) => {
       if (existingIdentifiers.has(resource.identifier)) {
         return null; // Skip messages that are already displayed
       }
-
+    
       try {
         console.log(`Fetching message with identifier: ${resource.identifier}`);
         const messageResponse = await qortalRequest({
           action: "FETCH_QDN_RESOURCE",
           name: resource.name,
-          service: "BLOG_POST",
+          service,
           identifier: resource.identifier,
+          ...(room === "admins" ? { encoding: "base64" } : {}),
         });
-
+    
         console.log("Fetched message response:", messageResponse);
-
-        // No need to decode, as qortalRequest returns the decoded data if no 'encoding: base64' is set.
-        const messageObject = messageResponse;
+    
         const timestamp = resource.updated || resource.created;
         const formattedTimestamp = await timestampToHumanReadableDate(timestamp);
-        return { 
-          name: resource.name, 
-          content: messageObject.messageHtml, 
-          date: formattedTimestamp, 
-          identifier: resource.identifier, 
-          replyTo: messageObject.replyTo, 
-          timestamp,
-          attachments: messageObject.attachments || [] // Include attachments if they exist
-        };
-      } catch (error) {
-        console.error(`Failed to fetch message with identifier ${resource.identifier}. Error: ${error.message}`);
-        return null;
-      }
-    }));
+    
+        let messageObject;
+
+          if (room === "admins") {
+            try {
+              const decryptedData = await decryptObject(messageResponse);
+              messageObject = JSON.parse(atob(decryptedData))
+            } catch (error) {
+              console.error(`Failed to decrypt message: ${error.message}`);
+              return {
+                name: resource.name,
+                content: "<em>Encrypted message cannot be displayed</em>",
+                date: formattedTimestamp,
+                identifier: resource.identifier,
+                replyTo: null,
+                timestamp,
+                attachments: [],
+              };
+            }
+          } else {
+            messageObject = messageResponse;
+          }
+
+          return {
+            name: resource.name,
+            content: messageObject?.messageHtml || "<em>Message content missing</em>",
+            date: formattedTimestamp,
+            identifier: resource.identifier,
+            replyTo: messageObject?.replyTo || null,
+            timestamp,
+            attachments: messageObject?.attachments || [],
+          };
+        } catch (error) {
+          console.error(`Failed to fetch message with identifier ${resource.identifier}. Error: ${error.message}`);
+          return {
+            name: resource.name,
+            content: "<em>Error loading message</em>",
+            date: "Unknown",
+            identifier: resource.identifier,
+            replyTo: null,
+            timestamp: resource.updated || resource.created,
+            attachments: [],
+          };
+        }
+      })
+    );
 
     // Render new messages without duplication
     for (const message of fetchMessages) {
       if (message && !existingIdentifiers.has(message.identifier)) {
+        const isNewMessage = !mostRecentMessage || new Date(message.timestamp) > new Date(mostRecentMessage?.latestTimestamp);
+        if (isNewMessage && !firstNewMessageIdentifier) {
+          firstNewMessageIdentifier = message.identifier;
+        }
         let replyHtml = "";
         if (message.replyTo) {
           const repliedMessage = fetchMessages.find(m => m && m.identifier === message.replyTo);
@@ -500,12 +612,10 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
           }
         }
 
-        const isNewMessage = !mostRecentMessage || new Date(message.timestamp) > new Date(mostRecentMessage?.latestTimestamp);
-
         let attachmentHtml = "";
         if (message.attachments && message.attachments.length > 0) {
           for (const attachment of message.attachments) {
-            if (attachment.mimeType && attachment.mimeType.startsWith('image/')) {
+            if (room !== "admins" && attachment.mimeType && attachment.mimeType.startsWith('image/')) {
               try {
                 // Construct the image URL
                 const imageUrl = `/arbitrary/${attachment.service}/${attachment.name}/${attachment.identifier}`;
@@ -538,7 +648,6 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
           }
         }
         
-
         const avatarUrl = `/arbitrary/THUMBNAIL/${message.name}/qortal_avatar`;
         const messageHTML = `
           <div class="message-item" data-identifier="${message.identifier}">
@@ -546,6 +655,7 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
               <div style="display: flex; align-items: center;">
                 <img src="${avatarUrl}" alt="Avatar" class="user-avatar" style="width: 30px; height: 30px; border-radius: 50%; margin-right: 10px;">
                 <span class="username">${message.name}</span>
+                ${isNewMessage ? `<span class="new-indicator" style="margin-left: 10px; color: red; font-weight: bold;">NEW</span>` : ''}
               </div>
               <span class="timestamp">${message.date}</span>
             </div>
@@ -571,6 +681,14 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
 
         // Add the identifier to the existingIdentifiers set
         existingIdentifiers.add(message.identifier);
+      }
+    }
+
+    if (firstNewMessageIdentifier && !isPolling) {
+      // Scroll to the first new message
+      const newMessageElement = document.querySelector(`.message-item[data-identifier="${firstNewMessageIdentifier}"]`);
+      if (newMessageElement) {
+        newMessageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
 

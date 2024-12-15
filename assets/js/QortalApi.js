@@ -1,6 +1,6 @@
 // Set the forumAdminGroups variable
 let adminGroups = ["Q-Mintership-admin", "dev-group", "Mintership-Forum-Admins"];
-
+let adminGroupIDs = ["721", "1", "673"];
 // Settings to allow non-devmode development with 'live-server' module
 let baseUrl = '';
 let isOutsideOfUiDevelopment = false;
@@ -344,6 +344,28 @@ const fetchMinterGroupAdmins = async () => {
     //use what is returned .member to obtain each member... {"member": "memberAddress", "isAdmin": "true"}
 }
 
+const fetchAllAdminGroupsMembers = async () => {
+    try  {
+        let adminGroupMemberAddresses = []; // Declare outside loop to accumulate results
+        for (const groupID of adminGroupIDs) {
+            const response = await fetch(`${baseUrl}/groups/members/${groupID}?limit=0`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+            });
+
+            const groupData = await response.json(); 
+            if (groupData.members && Array.isArray(groupData.members)) {
+                adminGroupMemberAddresses.push(...groupData.members); // Merge members into the array
+            } else {
+                console.warn(`Group ${groupID} did not return valid members.`);
+            }
+        }
+        return adminGroupMemberAddresses;
+    } catch (error) {
+        console.log('Error fetching admin group members', error);
+    }
+};
+
 const fetchMinterGroupMembers = async () => {
     try {
       const response = await fetch(`${baseUrl}/groups/members/694?limit=0`, {
@@ -388,6 +410,48 @@ const fetchAllGroups = async (limit) => {
         console.error('Error fetching all groups:', error);
     }
 };
+
+const fetchAdminGroupsMembersPublicKeys = async () => {
+    try {
+        let adminGroupMemberAddresses = []; // Declare outside loop to accumulate results
+        for (const groupID of adminGroupIDs) {
+            const response = await fetch(`${baseUrl}/groups/members/${groupID}?limit=0`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+            });
+
+            const groupData = await response.json(); 
+            if (groupData.members && Array.isArray(groupData.members)) {
+                adminGroupMemberAddresses.push(...groupData.members); // Merge members into the array
+            } else {
+                console.warn(`Group ${groupID} did not return valid members.`);
+            }
+        }
+
+        // Check if adminGroupMemberAddresses has valid data
+        if (!Array.isArray(adminGroupMemberAddresses)) {
+            throw new Error("Expected 'adminGroupMemberAddresses' to be an array but got a different structure");
+        }
+
+        let allMemberPublicKeys = []; // Declare outside loop to accumulate results
+        for (const member of adminGroupMemberAddresses) {
+            const memberPublicKey = await getPublicKeyFromAddress(member.member);
+            allMemberPublicKeys.push(memberPublicKey);
+        }
+
+        // Check if allMemberPublicKeys has valid data
+        if (!Array.isArray(allMemberPublicKeys)) {
+            throw new Error("Expected 'allMemberPublicKeys' to be an array but got a different structure");
+        }
+
+        console.log(`AdminGroupMemberPublicKeys have been fetched.`);
+        return allMemberPublicKeys;
+    } catch (error) {
+        console.error('Error fetching admin group member public keys:', error);
+        return []; // Return an empty array to prevent further errors
+    }
+};
+
 
 // QDN data calls
 const searchLatestDataByIdentifier = async (identifier) => {
@@ -476,23 +540,45 @@ const searchAllResources = async (query, limit, after, reverse=false) => {
     }
 };
 
-const searchAllWithOffset = async (query, limit, offset) =>{
+const searchAllWithOffset = async (service, query, limit, offset, room) => {
     try {
-      const response = await qortalRequest({
-        action: "SEARCH_QDN_RESOURCES",
-        service: "BLOG_POST",
-        query: query,
-        limit: limit,
-        offset: offset,
-        mode: "ALL",
-        reverse: false
-      });
-      return response
+      if (!service || (service === "BLOG_POST" && room !== "admins")) {
+        console.log("Performing search for BLOG_POST...");
+        const response = await qortalRequest({
+          action: "SEARCH_QDN_RESOURCES",
+          service: "BLOG_POST",
+          query,
+          limit,
+          offset,
+          mode: "ALL",
+          reverse: false,
+        });
+        return response;
+      } 
+      
+      if (room === "admins") {
+        service = service || "MAIL_PRIVATE"; // Default to MAIL_PRIVATE if no service provided
+        console.log("Performing search for MAIL_PRIVATE in Admin room...");
+        const response = await qortalRequest({
+          action: "SEARCH_QDN_RESOURCES",
+          service,
+          query,
+          limit,
+          offset,
+          mode: "ALL",
+          reverse: false,
+        });
+        return response;
+      }
+      
+      console.warn("Invalid parameters passed to searchAllWithOffset");
+      return []; // Return empty array if no valid conditions match
     } catch (error) {
       console.error("Error during SEARCH_QDN_RESOURCES:", error);
-      return [];
+      return []; // Return empty array on error
     }
-}
+  };
+  
 
 const searchAllCountOnly = async (query) => {
     try {

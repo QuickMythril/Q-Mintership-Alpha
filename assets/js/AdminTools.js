@@ -73,11 +73,16 @@ async function loadMinterAdminToolsPage() {
     const mainContent = document.createElement('div');
     mainContent.innerHTML = `
       <div class="tools-main mbr-parallax-background cid-ttRnlSkg2R">
-        <div class="tools-header" style="color: lightblue; display: flex; justify-content: center; align-items: center; padding: 10px;">
-          <div> <h1 style="font-size: 50px; margin: 0;">MINTER ADMIN TOOLS for Admin = </h1></div>
-          <div class="user-info" style="border: 1px solid lightblue; padding: 5px; color: lightblue; display: flex; align-items: center; justify-content: center;">
+        <div class="tools-header" style="color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px;">
+          <div> <h1 style="font-size: 50px; margin: 0;">MINTER ADMIN TOOLS </h1><a style="color: red;">Under Construction...</a></div>
+          <div class="user-info" style="border: 1px solid lightblue; padding: 5px; color: lightblue; display: flex; align-items: center; justify-content: center; ">
             <img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; margin-right: 10px;">
             <span>${userState.accountName || 'Guest'}</span>
+          </div>
+          <div><h2>No Functionality Here Yet</h2></div>
+          <div>
+          <p>This page is still under development. Until the final Mintership proposal modifications are made, and the MINTER group is transferred to null, there is no need for this page's functionality. The page will be updated when the final modifications are made.</p>
+          <p> This page until then is simply a placeholder.</p>
           </div>
         </div>
          

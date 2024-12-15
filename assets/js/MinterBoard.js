@@ -133,6 +133,7 @@ const loadCards = async () => {
       return;
     }
 
+    // Validate cards
     const validatedCards = await Promise.all(
       response.map(async card => {
         console.log("Validating card:", card);
@@ -141,14 +142,28 @@ const loadCards = async () => {
       })
     );
 
+    // Filter valid cards
     const validCards = validatedCards.filter(card => card !== null);
-    cardsContainer.innerHTML = "";
 
     if (validCards.length === 0) {
       cardsContainer.innerHTML = "<p>No valid cards found.</p>";
       return;
     }
 
+    // Sort valid cards by timestamp (oldest to newest)
+    validCards.sort((a, b) => {
+      const timestampA = a.updated || a.created || 0; // Use updated or created timestamp
+      const timestampB = b.updated || b.created || 0;
+      return timestampA - timestampB;
+    });
+
+    // Reverse the sorted order (newest first)
+    validCards.reverse();
+
+    // Clear the container before adding cards
+    cardsContainer.innerHTML = "";
+
+    // Process and display each card
     await Promise.all(
       validCards.map(async card => {
         try {
@@ -165,8 +180,15 @@ const loadCards = async () => {
             return;
           }
 
+          // Fetch poll results and check admin votes
           const pollResults = await fetchPollResults(cardData.poll);
           console.log(`Poll Results Fetched - totalVotes: ${pollResults.totalVotes}`);
+
+          // Check if more than 3 admins voted "No"
+          if (pollResults.adminNo > 3) {
+            console.log(`Card ${card.identifier} hidden due to more than 3 admin downvotes.`);
+            return; // Skip this card
+          }
 
           const cardHTML = await createCardHTML(cardData, pollResults, card.identifier);
           cardsContainer.insertAdjacentHTML("beforeend", cardHTML);
@@ -180,6 +202,8 @@ const loadCards = async () => {
     cardsContainer.innerHTML = "<p>Failed to load cards.</p>";
   }
 };
+
+
 
 
 // Function to check and fech an existing Minter Card if attempting to publish twice ----------------------------------------
@@ -339,7 +363,11 @@ const publishCard = async () => {
 //Calculate the poll results passed from other functions with minterGroupMembers and minterAdmins ---------------------------
 const calculatePollResults = async (pollData, minterGroupMembers, minterAdmins) => {
   const memberAddresses = minterGroupMembers.map(member => member.member)
-  const adminAddresses = minterAdmins.map(member => member.member)
+  const minterAdminAddresses = minterAdmins.map(member => member.member)
+  const adminGroupsMembers = await fetchAllAdminGroupsMembers()
+  const groupAdminAddresses = adminGroupsMembers.map(member => member.member)
+  const adminAddresses = [];
+  adminAddresses.push(...minterAdminAddresses,...groupAdminAddresses);
 
   let adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, yesWeight = 0 , noWeight = 0
 
@@ -408,7 +436,7 @@ const postComment = async (cardIdentifier) => {
 
     alert('Comment posted successfully!');
     commentInput.value = ''; // Clear input
-    await displayComments(cardIdentifier); // Refresh comments
+    // await displayComments(cardIdentifier); // Refresh comments - We don't need to do this as comments will be displayed only after confirmation.
   } catch (error) {
     console.error('Error posting comment:', error);
     alert('Failed to post comment.');
