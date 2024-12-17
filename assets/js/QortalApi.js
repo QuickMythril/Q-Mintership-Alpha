@@ -793,6 +793,24 @@ const fetchPollResults = async (pollName) => {
     }
   };
 
+  // Vote YES on a poll ------------------------------
+const voteYesOnPoll = async (poll) => {
+    await qortalRequest({
+      action: "VOTE_ON_POLL",
+      pollName: poll,
+      optionIndex: 0,
+    });
+  }
+  
+  // Vote NO on a poll -----------------------------
+  const voteNoOnPoll = async (poll) => {
+    await qortalRequest({
+      action: "VOTE_ON_POLL",
+      pollName: poll,
+      optionIndex: 1,
+    });
+  }
+
 // export {
 //     userState,
 //     adminGroups,

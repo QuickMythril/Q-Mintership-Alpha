@@ -599,6 +599,13 @@ body {
     padding: 1.2vh;
   }
 }
+
+.refresh-cards-button {
+ border-color: white;
+ border-radius: 1.5vh;
+ background-color: black;
+ color: white;
+}
 /* Two cards per row on medium screens */
 
 /* @media (max-width: 768px) {

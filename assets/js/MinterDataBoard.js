@@ -1,25 +1,32 @@
 // const cardIdentifierPrefix = "test-board-card"
 const testMode = true;
-const cardIdentifierPrefix = "testMB-board-card";
+const cardIdentifierPrefix = "test-mData-card";
 let isExistingCard = false;
 let existingCardData = {};
 let existingCardIdentifier = {};
 
+const isAdmin = await verifyUserIsAdmin()
+  
 document.addEventListener("DOMContentLoaded", async () => {
-  const minterBoardLinks = document.querySelectorAll('a[href="MINTER-BOARD"], a[href="MINTERS"]');
+// Verify admin status and hide/show buttons
+if (await isAdmin()) {
+    document.addEventListener("DOMContentLoaded", async () => {
+        const minterBoardLinks = document.querySelectorAll('a[href="MINTER-DATA-BOARD"], a[href="DATA-BOARD"]');
+        
+        minterBoardLinks.forEach(link => {
+            link.addEventListener("click", async (event) => {
+            event.preventDefault();
+            if (!userState.isLoggedIn) {
+                await login();
+            }
+            await loadMinterDataBoardPage();
+            });
+        });
+        });
+    }
+})
 
-  minterBoardLinks.forEach(link => {
-    link.addEventListener("click", async (event) => {
-      event.preventDefault();
-      if (!userState.isLoggedIn) {
-        await login();
-      }
-      await loadMinterBoardPage();
-    });
-  });
-});
-
-const loadMinterBoardPage = async () => {
+const loadMinterDataBoardPage = async () => {
   // Clear existing content on the page
   const bodyChildren = document.body.children;
   for (let i = bodyChildren.length - 1; i >= 0; i--) {
@@ -34,8 +41,8 @@ const loadMinterBoardPage = async () => {
   mainContent.innerHTML = `
     <div class="minter-board-main" style="padding: 20px; text-align: center;">
       <h1 style="color: lightblue;">Minter Board</h1>
-      <p style="font-size: 1.25em;"> The Minter Board is a place to publish information about yourself in order to obtain support from existing Minters and Minter Admins on the Qortal network. You may publish a header, content, and links to other QDN-published content in order to support you in your mission. Minter Admins and Existing Minters will then support you (or not) by way of a vote on your card. Card details you publish, along with existing poll results, and comments from others, will be displayed here. Good Luck on your Qortal journey to becoming a minter!</p>
-      <button id="publish-card-button" class="publish-card-button" style="margin: 20px; padding: 10px;">Publish Minter Card</button>
+      <p style="font-size: 1.25em;"> The Minter Data Board is an encrypted card publishing board to keep track of minter data for the Minter Admins. Any Admin may publish a card, and related data, make comments on existing cards, and vote on existing card data in support or not of the name on the card. </p>
+      <button id="publish-card-button" class="publish-card-button" style="margin: 20px; padding: 10px;">Publish Encrypted Card</button>
       <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Cards</button>
       <div id="cards-container" class="cards-container" style="margin-top: 20px;"></div>
       <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
@@ -60,16 +67,16 @@ const loadMinterBoardPage = async () => {
 
   document.getElementById("publish-card-button").addEventListener("click", async () => {
     try {
-      const fetchedCard = await fetchExistingCard();
+      const fetchedCard = await checkDuplicateEncryptedCard();
       if (fetchedCard) {
         // An existing card is found
         if (testMode) {
           // In test mode, ask user what to do
-          const updateCard = confirm("A card already exists. Do you want to update it?");
+          const updateCard = confirm("A card already exists. Do you want to update it? Note, updating it will overwrite the data of the original publisher, only do this if necessary!");
           if (updateCard) {
             isExistingCard = true;
-            await loadCardIntoForm(existingCardData);
-            alert("Edit your existing card and publish.");
+            await loadEncryptedCardIntoForm(existingCardData);
+            alert("Edit the existing ");
           } else {
             alert("Test mode: You can now create a new card.");
             isExistingCard = false;
@@ -78,9 +85,9 @@ const loadMinterBoardPage = async () => {
           }
         } else {
           // Not in test mode, force editing
-          alert("A card already exists. Publishing of multiple cards is not allowed. Please update your card.");
+          alert("A card already exists. Publishing of multiple cards for the same minter is not allowed, either use existing card or update it.");
           isExistingCard = true;
-          await loadCardIntoForm(existingCardData);
+          await loadEncryptedCardIntoForm(existingCardData);
         }
       } else {
         // No existing card found
@@ -98,10 +105,20 @@ const loadMinterBoardPage = async () => {
     }
   });
 
+  const checkDuplicateEncryptedCard = async (minterName) => {
+    const response = await qortalRequest({
+      action: "SEARCH_QDN_RESOURCES",
+      service: "MAIL_PRIVATE",
+      query: `${cardIdentifierPrefix}-${minterName}`,
+      mode: "ALL",
+    });
+    return response && response.length > 0;
+  };
+
   document.getElementById("refresh-cards-button").addEventListener("click", async () => {
     const cardsContainer = document.getElementById("cards-container");
     cardsContainer.innerHTML = "<p>Refreshing cards...</p>";
-    await loadCards();
+    await fetchEncryptedCards();
   });
   
 
@@ -123,21 +140,21 @@ const loadMinterBoardPage = async () => {
 
   document.getElementById("publish-card-form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    await publishCard();
+    await publishEncryptedCard();
   });
 
-  await loadCards();
+  await fetchEncryptedCards();
 }
 
 //Main function to load the Minter Cards ----------------------------------------
-const loadCards = async () => {
+const fetchEncryptedCards = async () => {
   const cardsContainer = document.getElementById("cards-container");
   cardsContainer.innerHTML = "<p>Loading cards...</p>";
 
   try {
     const response = await qortalRequest({
       action: "SEARCH_QDN_RESOURCES",
-      service: "BLOG_POST",
+      service: "MAIL_PRIVATE",
       query: cardIdentifierPrefix,
       mode: "ALL"
     });
@@ -150,7 +167,7 @@ const loadCards = async () => {
     // Validate cards and filter
     const validatedCards = await Promise.all(
       response.map(async card => {
-        const isValid = await validateCardStructure(card);
+        const isValid = await validateEncryptedCardStructure(card);
         return isValid ? card : null;
       })
     );
@@ -182,7 +199,7 @@ const loadCards = async () => {
         const cardDataResponse = await qortalRequest({
           action: "FETCH_QDN_RESOURCE",
           name: card.name,
-          service: "BLOG_POST",
+          service: "MAIL_PRIVATE",
           identifier: card.identifier,
         });
     
@@ -217,41 +234,9 @@ const loadCards = async () => {
   }
 };
 
-const removeSkeleton = (cardIdentifier) => {
-  const skeletonCard = document.getElementById(`skeleton-${cardIdentifier}`);
-  if (skeletonCard) {
-    skeletonCard.remove(); // Remove the skeleton silently
-  }
-};
-
-const replaceSkeleton = (cardIdentifier, htmlContent) => {
-  const skeletonCard = document.getElementById(`skeleton-${cardIdentifier}`);
-  if (skeletonCard) {
-    skeletonCard.outerHTML = htmlContent;
-  }
-};
-
-// Function to create a skeleton card
-const createSkeletonCardHTML = (cardIdentifier) => {
-  return `
-    <div id="skeleton-${cardIdentifier}" class="skeleton-card" style="padding: 10px; border: 1px solid gray; margin: 10px 0;">
-      <div style="display: flex; align-items: center;">
-        <div style="width: 50px; height: 50px; background-color: #ccc; border-radius: 50%;"></div>
-        <div style="margin-left: 10px;">
-          <div style="width: 120px; height: 20px; background-color: #ccc; margin-bottom: 5px;"></div>
-          <div style="width: 80px; height: 15px; background-color: #ddd;"></div>
-        </div>
-      </div>
-      <div style="margin-top: 10px;">
-        <div style="width: 100%; height: 40px; background-color: #eee;"></div>
-      </div>
-    </div>
-  `;
-};
-
 
 // Function to check and fech an existing Minter Card if attempting to publish twice ----------------------------------------
-const fetchExistingCard = async () => {
+const fetchExistingEncryptedCard = async () => {
   try {
     // Step 1: Perform the search
     const response = await qortalRequest({
@@ -274,7 +259,7 @@ const fetchExistingCard = async () => {
     // Step 3: Validate cards asynchronously
     const validatedCards = await Promise.all(
       response.map(async card => {
-        const isValid = await validateCardStructure(card);
+        const isValid = await validateEncryptedCardStructure(card);
         return isValid ? card : null;
       })
     );
@@ -311,7 +296,7 @@ const fetchExistingCard = async () => {
 };
 
 // Validate that a card is indeed a card and not a comment. -------------------------------------
-const validateCardStructure = async (card) => {
+const validateEncryptedCardStructure = async (card) => {
   return (
     typeof card === "object" &&
     card.name &&
@@ -322,7 +307,7 @@ const validateCardStructure = async (card) => {
 }
 
 // Load existing card data passed, into the form for editing -------------------------------------
-const loadCardIntoForm = async (cardData) => {
+const loadEncryptedCardIntoForm = async (cardData) => {
   console.log("Loading existing card data:", cardData);
   document.getElementById("card-header").value = cardData.header;
   document.getElementById("card-content").value = cardData.content;
@@ -339,7 +324,7 @@ const loadCardIntoForm = async (cardData) => {
 }
 
 // Main function to publish a new Minter Card -----------------------------------------------
-const publishCard = async () => {
+const publishEncryptedCard = async () => {
   const header = document.getElementById("card-header").value.trim();
   const content = document.getElementById("card-content").value.trim();
   const links = Array.from(document.querySelectorAll(".card-link"))
@@ -403,50 +388,8 @@ const publishCard = async () => {
   }
 }
 
-//Calculate the poll results passed from other functions with minterGroupMembers and minterAdmins ---------------------------
-const calculatePollResults = async (pollData, minterGroupMembers, minterAdmins) => {
-  const memberAddresses = minterGroupMembers.map(member => member.member)
-  const minterAdminAddresses = minterAdmins.map(member => member.member)
-  const adminGroupsMembers = await fetchAllAdminGroupsMembers()
-  const groupAdminAddresses = adminGroupsMembers.map(member => member.member)
-  const adminAddresses = [];
-  adminAddresses.push(...minterAdminAddresses,...groupAdminAddresses);
-
-  let adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, yesWeight = 0 , noWeight = 0
-
-  pollData.voteWeights.forEach(weightData => {
-    if (weightData.optionName === 'Yes') {
-      yesWeight = weightData.voteWeight
-    } else if (weightData.optionName === 'No') {
-      noWeight = weightData.voteWeight
-    }
-  })
-
-  for (const vote of pollData.votes) {
-    const voterAddress = await getAddressFromPublicKey(vote.voterPublicKey)
-    console.log(`voter address: ${voterAddress}`)
-
-    if (vote.optionIndex === 0) {
-      adminAddresses.includes(voterAddress) ? adminYes++ : memberAddresses.includes(voterAddress) ? minterYes++ : console.log(`voter ${voterAddress} is not a minter nor an admin...Not including results...`)
-    } else if (vote.optionIndex === 1) {
-      adminAddresses.includes(voterAddress) ? adminNo++ : memberAddresses.includes(voterAddress) ? minterNo++ : console.log(`voter ${voterAddress} is not a minter nor an admin...Not including results...`)
-    }
-  }
-
-  // TODO - create a new function to calculate the weights of each voting MINTER only. 
-  // This will give ALL weight whether voter is in minter group or not... 
-  // until that is changed on the core we must calculate manually. 
-  const totalYesWeight = yesWeight
-  const totalNoWeight = noWeight
-
-  const totalYes = adminYes + minterYes
-  const totalNo = adminNo + minterNo
-
-  return { adminYes, adminNo, minterYes, minterNo, totalYes, totalNo, totalYesWeight, totalNoWeight }
-}
-
 // Post a comment on a card. ---------------------------------
-const postComment = async (cardIdentifier) => {
+const postEncryptedComment = async (cardIdentifier) => {
   const commentInput = document.getElementById(`new-comment-${cardIdentifier}`);
   const commentText = commentInput.value.trim();
   if (!commentText) {
@@ -487,7 +430,7 @@ const postComment = async (cardIdentifier) => {
 };
 
 //Fetch the comments for a card with passed card identifier ----------------------------
-const fetchCommentsForCard = async (cardIdentifier) => {
+const fetchCommentsForEncryptedCard = async (cardIdentifier) => {
   try {
     const response = await qortalRequest({
       action: 'SEARCH_QDN_RESOURCES',
@@ -503,7 +446,7 @@ const fetchCommentsForCard = async (cardIdentifier) => {
 };
 
 // display the comments on the card, with passed cardIdentifier to identify the card --------------
-const displayComments = async (cardIdentifier) => {
+const displayEncryptedComments = async (cardIdentifier) => {
   try {
     const comments = await fetchCommentsForCard(cardIdentifier);
     const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`);
@@ -532,6 +475,8 @@ const displayComments = async (cardIdentifier) => {
     alert("Failed to load comments. Please try again.");
   }
 };
+
+
 
 // Toggle comments from being shown or not, with passed cardIdentifier for comments being toggled --------------------
 const toggleComments = async (cardIdentifier) => {
@@ -589,7 +534,7 @@ const processLink = async (link) => {
 
 
 // Create the overall Minter Card HTML -----------------------------------------------
-const createCardHTML = async (cardData, pollResults, cardIdentifier) => {
+const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier) => {
   const { header, content, links, creator, timestamp, poll } = cardData;
   const formattedDate = new Date(timestamp).toLocaleString();
   const avatarUrl = `/arbitrary/THUMBNAIL/${creator}/qortal_avatar`;

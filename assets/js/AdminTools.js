@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log(`User is an Admin, buttons for MA Tools not removed. userState.isAdmin = ${userState.isMinterAdmin}`);
   } else {
     // Remove all "TOOLS" links and their related elements
-    const toolsLinks = document.querySelectorAll('a[href="TOOLS"]');
+    const toolsLinks = document.querySelectorAll('a[href="TOOLS"], a[href="MINTER-BOARD"], a[href="MINTERS"]');
     toolsLinks.forEach(link => {
       // If the link is within a button, remove the button
       const buttonParent = link.closest('button');
