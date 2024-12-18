@@ -6,57 +6,6 @@ async function verifyMinterAdminState() {
   return minterGroupAdmins.members.some(admin => admin.member === userState.accountAddress && admin.isAdmin);
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-  const isAdmin = await verifyUserIsAdmin();
-
-  if (isAdmin) {
-    console.log(`User is an Admin, buttons for MA Tools not removed. userState.isAdmin = ${userState.isMinterAdmin}`);
-  } else {
-    // Remove all "TOOLS" links and their related elements
-    const toolsLinks = document.querySelectorAll('a[href="TOOLS"], a[href="DATA-BOARD"]');
-    toolsLinks.forEach(link => {
-      // If the link is within a button, remove the button
-      const buttonParent = link.closest('button');
-      if (buttonParent) {
-        buttonParent.remove();
-      }
-
-      // If the link is within an image card or any other element, remove that element
-      const cardParent = link.closest('.item.features-image');
-      if (cardParent) {
-        cardParent.remove();
-      }
-
-      // Finally, remove the link itself if it's not covered by the above removals
-      link.remove();
-    });
-
-    console.log(`User is NOT a Minter Admin, buttons for MA Tools removed. userState.isMinterAdmin = ${userState.isMinterAdmin}`);
-
-    // Center the remaining card if it exists
-    const remainingCard = document.querySelector('.features7 .row .item.features-image');
-    if (remainingCard) {
-      remainingCard.classList.remove('col-lg-6', 'col-md-6');
-      remainingCard.classList.add('col-12', 'text-center');
-    }
-
-    return;
-  }
-
-  // Add event listener for admin tools link if the user is an admin
-  const toolsLinks = document.querySelectorAll('a[href="TOOLS"]');
-  toolsLinks.forEach(link => {
-    link.addEventListener('click', async (event) => {
-      event.preventDefault();
-      if (!userState.isLoggedIn) {
-        await login();
-      }
-      await loadMinterAdminToolsPage();
-    });
-  });
-});
-
-
 async function loadMinterAdminToolsPage() {
     // Remove all body content except for menu elements
     const bodyChildren = document.body.children;

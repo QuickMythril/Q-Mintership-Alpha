@@ -138,7 +138,7 @@ body {
 }
 .btn-secondary,
 .btn-secondary:active {
-  background-color: #a4a2a2 !important;
+  background-color: #7cddff !important;
   border-color: #a4a2a2 !important;
   color: #ffffff !important;
   box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.2);
@@ -148,7 +148,7 @@ body {
 .btn-secondary.focus,
 .btn-secondary.active {
   color: #ffffff !important;
-  background-color: #797676 !important;
+  background-color: #50abf1b5 !important;
   border-color: #797676 !important;
   box-shadow: 0 2px 5px 0 rgba(0, 0, 0, 0.2);
 }
@@ -1283,6 +1283,10 @@ a {
   }
 }
 .cid-ttRnktJ11Q .mbr-section-btn .btn,
+.cid-ttRnktJ11Q .mbr-section-btn-main .btn .admin-btn {
+  background-image: linear-gradient(99deg, rgba(23, 64, 86, 0.468) 30%, #77dff6 100%), radial-gradient(circle at 50% 50%, #64f7cb 0, rgba(255, 255, 255, 0) 70%);
+   ;
+}
 .cid-ttRnktJ11Q .mbr-section-btn-main .btn {
   background-image: linear-gradient(99deg, rgba(255, 255, 255, 0) 30%, #ffffff 100%), radial-gradient(circle at 50% 50%, #ffffff 0, rgba(255, 255, 255, 0) 70%);
    ;

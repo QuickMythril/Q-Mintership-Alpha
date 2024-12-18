@@ -453,7 +453,7 @@ const fetchAdminGroupsMembersPublicKeys = async () => {
 };
 
 
-// QDN data calls
+// QDN data calls --------------------------------------------------------------------------------------------------
 const searchLatestDataByIdentifier = async (identifier) => {
     console.log('fetchAllDataByIdentifier called');
     console.log('identifier:', identifier);
@@ -493,6 +493,22 @@ const publishMultipleResources = async (resources, publicKeys = null, isPrivate 
     };
 };
 
+// the object must be in base64 when sent 
+const decryptObject = async (encryptedData) => {
+    // const publicKey = await getPublicKeyFromAddress(userState.accountAddress)
+    const response = await qortalRequest({
+      action: 'DECRYPT_DATA',
+      encryptedData, // has to be in base64 format
+      // publicKey: publisherPublicKey  // requires the public key of the opposite user with whom you've created the encrypted data. For DIRECT messages only.
+    });
+    const decryptedObject = response
+    return decryptedObject
+}
+
+  const decryptAndParseObject = async (base64Data) => {
+    const decrypted = await decryptObject(base64Data);
+    return JSON.parse(atob(decrypted));
+};
 
 const searchResourcesWithMetadata = async (query, limit) => {
     console.log('searchResourcesWithMetadata called');

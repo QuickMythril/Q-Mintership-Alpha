@@ -1,23 +1,9 @@
-// const cardIdentifierPrefix = "test-board-card"
+// // NOTE - Change isTestMode to false prior to actual release ---- !important - You may also change identifier if you want to not show older cards.
 const testMode = true;
 const cardIdentifierPrefix = "testMB-board-card";
 let isExistingCard = false;
 let existingCardData = {};
 let existingCardIdentifier = {};
-
-document.addEventListener("DOMContentLoaded", async () => {
-  const minterBoardLinks = document.querySelectorAll('a[href="MINTER-BOARD"], a[href="MINTERS"]');
-
-  minterBoardLinks.forEach(link => {
-    link.addEventListener("click", async (event) => {
-      event.preventDefault();
-      if (!userState.isLoggedIn) {
-        await login();
-      }
-      await loadMinterBoardPage();
-    });
-  });
-});
 
 const loadMinterBoardPage = async () => {
   // Clear existing content on the page

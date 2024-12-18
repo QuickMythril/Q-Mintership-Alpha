@@ -15,22 +15,111 @@ if (localStorage.getItem("latestMessageIdentifiers")) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // Identify the links for 'Mintership Forum' and apply functionality
-  const mintershipForumLinks = document.querySelectorAll('a[href="MINTERSHIP-FORUM"]');
+  console.log("DOMContentLoaded fired!");
 
+  // --- GENERAL LINKS (MINTERSHIP-FORUM and MINTER-BOARD) ---
+  const mintershipForumLinks = document.querySelectorAll('a[href="MINTERSHIP-FORUM"]');
   mintershipForumLinks.forEach(link => {
     link.addEventListener('click', async (event) => {
       event.preventDefault();
-      //login if not already logged in.
       if (!userState.isLoggedIn) {
         await login();
       }
       await loadForumPage();
-      loadRoomContent("general"); // Automatically load General Room on forum load
-      startPollingForNewMessages(); // Start polling for new messages after loading the forum page
+      loadRoomContent("general");
+      startPollingForNewMessages();
     });
   });
+
+  const minterBoardLinks = document.querySelectorAll('a[href="MINTER-BOARD"], a[href="MINTERS"]');
+  minterBoardLinks.forEach(link => {
+    link.addEventListener("click", async (event) => {
+      event.preventDefault();
+      if (!userState.isLoggedIn) {
+        await login();
+      }
+      if (typeof loadMinterBoardPage === "undefined") {
+        console.log("loadMinterBoardPage not found, loading script dynamically...");
+        await loadScript("./assets/js/MinterBoard.js");
+      }
+      await loadMinterBoardPage();
+    });
+  });
+
+  // --- ADMIN CHECK ---
+  await verifyUserIsAdmin();
+
+  if (userState.isAdmin) {
+    console.log(`User is an Admin. Admin-specific buttons will remain visible.`);
+
+    // DATA-BOARD Links for Admins
+    const minterDataBoardLinks = document.querySelectorAll('a[href="ADMINBOARD"]');
+    minterDataBoardLinks.forEach(link => {
+      link.addEventListener("click", async (event) => {
+        event.preventDefault();
+        if (!userState.isLoggedIn) {
+          await login();
+        }
+        if (typeof loadAdminBoardPage === "undefined") {
+          console.log("loadAdminBoardPage function not found, loading script dynamically...");
+          await loadScript("./assets/js/AdminBoard.js");
+        }
+        await loadAdminBoardPage();
+      });
+    });
+
+    // TOOLS Links for Admins
+    const toolsLinks = document.querySelectorAll('a[href="TOOLS"]');
+    toolsLinks.forEach(link => {
+      link.addEventListener('click', async (event) => {
+        event.preventDefault();
+        if (!userState.isLoggedIn) {
+          await login();
+        }
+        if (typeof loadMinterAdminToolsPage === "undefined") {
+          console.log("loadMinterAdminToolsPage function not found, loading script dynamically...");
+          await loadScript("./assets/js/AdminTools.js");
+        }
+        await loadMinterAdminToolsPage();
+      });
+    });
+
+  } else {
+    console.log("User is NOT an Admin. Removing admin-specific links.");
+    
+    // Remove all admin-specific links and their parents
+    const toolsLinks = document.querySelectorAll('a[href="TOOLS"], a[href="DATA-BOARD"]');
+    toolsLinks.forEach(link => {
+      const buttonParent = link.closest('button');
+      if (buttonParent) buttonParent.remove();
+
+      const cardParent = link.closest('.item.features-image');
+      if (cardParent) cardParent.remove();
+
+      link.remove();
+    });
+
+    // Center the remaining card if it exists
+    const remainingCard = document.querySelector('.features7 .row .item.features-image');
+    if (remainingCard) {
+      remainingCard.classList.remove('col-lg-6', 'col-md-6');
+      remainingCard.classList.add('col-12', 'text-center');
+    }
+  }
+
+  console.log("All DOMContentLoaded tasks completed.");
 });
+
+async function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
 
 // Main load function to clear existing HTML and load the forum page -----------------------------------------------------
 const loadForumPage = async () => {
@@ -452,6 +541,7 @@ const showSuccessNotification = () => {
   notification.style.color = "green";
   notification.style.marginTop = "1em";
   document.querySelector(".message-input-section").appendChild(notification);
+  alert(`Successfully Published! Please note that messages will not display until after they are CONFIRMED, be patient!`)
 
   setTimeout(() => {
     notification.remove();
@@ -463,17 +553,6 @@ const generateAttachmentID = (room, fileIndex = null) => {
   const baseID = room === "admins" ? `${messageAttachmentIdentifierPrefix}-${room}-e-${Date.now()}` : `${messageAttachmentIdentifierPrefix}-${room}-${Date.now()}`;
   return fileIndex !== null ? `${baseID}-${fileIndex}` : baseID;
 };
-
-const decryptObject = async (encryptedData) => {
-  // const publicKey = await getPublicKeyFromAddress(userState.accountAddress)
-  const response = await qortalRequest({
-    action: 'DECRYPT_DATA',
-    encryptedData, // has to be in base64 format
-    // publicKey: publisherPublicKey  // requires the public key of the opposite user with whom you've created the encrypted data. For DIRECT messages only.
-  });
-  const decryptedObject = response
-  return decryptedObject
-}
 
 const decryptFile = async (encryptedData) => {
   const publicKey = await getPublicKeyByName(userState.accountName)
