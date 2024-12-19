@@ -660,18 +660,21 @@ body {
   justify-content: space-between;
   align-items: stretch;
 }
+
 .minter-card:hover {
   transform: translateY(-5px); /* Slightly lift card on hover */
-}
-
-.minter-card img {
-  margin-left: 43.9%;
 }
 
 .minter-card-header h3 {
   margin: 0;
   font-size: 1.6em;
   color: #ffae42; /* Highlight for the header */
+}
+
+.minter-card-header h2 {
+  margin-bottom: 1.5em;
+  color:#7acdf4;
+  font-size: 1.0em;
 }
 
 .minter-card h5 {
@@ -753,6 +756,136 @@ body {
 }
 
 .minter-card .info {
+  background-color: #2a2a2a; /* Very dark grey background */
+  border: 1px solid #d3d3d3; /* Light grey border */
+  padding: 1rem; /* Add padding inside the section */
+  margin: 1rem 0; /* Add margin outside the section for spacing */
+  font-size: 1.1em; /* Set the font size */
+  line-height: 1.5; /* Optional: Adjust line spacing for better readability */
+  height: calc(1.5 * 750 / 66 * 0.8em); /* Dynamically calculate height to fit 1000 characters */
+  overflow-y: auto; /* Enable vertical scrolling if content overflows */
+  border-radius: 8px; /* Optional: Add rounded corners */
+  color: #f1f1f1; /* Optional: Light grey text color for readability */
+}
+
+.admin-card{
+  background-color: #0b1925;
+  flex: auto;
+  display: flex;
+  min-width: 22rem;
+  /* max-width: 22rem; */
+  max-width: calc(30% - 3rem);
+  color: #ffffff;
+  border: 1px solid #8cabba;
+  border-radius: 12px;
+  padding: 1vh;
+  min-height: 30vh;
+  max-height: auto;
+  margin: 1vh;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  font-family: 'Arial', sans-serif;
+  transition: transform 0.2s ease-in-out;
+  flex-direction: column;
+  /* align-content: center; */
+  justify-content: space-between;
+  align-items: stretch;
+}
+
+.admin-card:hover {
+  transform: translateY(-5px); /* Slightly lift card on hover */
+}
+
+.admin-card-header h3 {
+  margin: 0;
+  font-size: 1.6em;
+  color: #ffae42; /* Highlight for the header */
+}
+
+.admin-card-header h2 {
+  margin-bottom: 1.5em;
+  color:#7acdf4;
+  font-size: 1.0em;
+}
+
+.admin-card h5 {
+  margin: 0;
+  font-size: 1.4em;
+  color: lightgreen;
+  text-align: center;
+}
+.admin-card p {
+  font-size: 1.12em;
+}
+
+.admin-card-header p {
+  font-size: 1.15em;
+  color: #cccccc; /* Subdued color for additional header info */
+}
+
+.admin-card-results {
+  margin: 15px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-content: stretch;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.admin-card-results h5 {
+  margin-bottom: 1vh;
+  font-size: 1.3em;
+  color: lightgreen;
+  text-align: center;
+}
+
+.admin-card-results div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.admin-card-results span {
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 1.1em;
+}
+
+.admin-card-results .admin-yes {
+  background-color: #ccffcc; /* Light green */
+  color: #006600;
+}
+
+.admin-card-results .admin-no {
+  background-color: #ffcccc; /* Light red */
+  color: #660000;
+}
+
+.admin-card-results .admin-yes {
+  background-color: #99cc99; /* Medium green */
+  color: #004d00;
+}
+
+.admin-card-results .admin-no {
+  background-color: #cc9999; /* Medium red */
+  color: #4d0000;
+}
+
+.admin-card-results .total-yes {
+  background-color: #669966; /* Dark green */
+  color: #003300;
+}
+
+.admin-card-results .total-no {
+  background-color: #996666; /* Dark red */
+  color: #330000;
+}
+
+.info .content-preview {
+  font-size: 0.85em;
+  color: #dddddd;
+}
+
+.admin-card .info {
   background-color: #2a2a2a; /* Very dark grey background */
   border: 1px solid #d3d3d3; /* Light grey border */
   padding: 1rem; /* Add padding inside the section */

@@ -207,7 +207,7 @@ figure[mbr-media-size] {
 
 img,
 iframe {
-  display: block;
+  /* display: block; */
   width: 100%;
 }
 
