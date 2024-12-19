@@ -51,6 +51,36 @@ const base64EncodeString = async (str) => {
     return encodedString;
 };
 
+// const decryptToUnit8ArraySubject =
+//     base64ToUint8Array(decryptedData);
+//     const responseData = uint8ArrayToObject(
+//     decryptToUnit8ArraySubject
+// );
+
+const base64ToUint8Array = async (base64) => {
+    const binaryString = atob(base64)
+    const len = binaryString.length
+    const bytes = new Uint8Array(len)
+
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i)
+    }
+
+    return bytes
+  }
+
+const uint8ArrayToObject = async (uint8Array) => {
+    // Decode the byte array using TextDecoder
+    const decoder = new TextDecoder()
+    const jsonString = decoder.decode(uint8Array)
+
+    // Convert the JSON string back into an object
+    const obj = JSON.parse(jsonString)
+
+    return obj
+  }
+
+
 const objectToBase64 = async (obj) => {
     // Step 1: Convert the object to a JSON string
     const jsonString = JSON.stringify(obj);
@@ -495,7 +525,6 @@ const publishMultipleResources = async (resources, publicKeys = null, isPrivate 
 
 // the object must be in base64 when sent 
 const decryptObject = async (encryptedData) => {
-    // const publicKey = await getPublicKeyFromAddress(userState.accountAddress)
     const response = await qortalRequest({
       action: 'DECRYPT_DATA',
       encryptedData, // has to be in base64 format
@@ -504,11 +533,31 @@ const decryptObject = async (encryptedData) => {
     const decryptedObject = response
     return decryptedObject
 }
+// const decryptAndParseObject = async (base64Data) => {
+//     const decrypted = await decryptObject(base64Data);
+//     return JSON.parse(atob(decrypted));
+// };
 
-  const decryptAndParseObject = async (base64Data) => {
-    const decrypted = await decryptObject(base64Data);
-    return JSON.parse(atob(decrypted));
-};
+const decryptAndParseObject = async (base64Data) => {
+    const decrypto = await decryptObject(base64Data)
+    const binaryString = atob(decrypto)
+    const len = binaryString.length
+    const bytes = new Uint8Array(len)
+
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i)
+    }
+    
+    // Decode the byte array using TextDecoder
+    const decoder = new TextDecoder()
+    const jsonString = decoder.decode(bytes)
+
+    // Convert the JSON string back into an object
+    const obj = JSON.parse(jsonString)
+
+    return obj
+}
+
 
 const searchResourcesWithMetadata = async (query, limit) => {
     console.log('searchResourcesWithMetadata called');

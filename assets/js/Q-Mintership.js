@@ -88,7 +88,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.log("User is NOT an Admin. Removing admin-specific links.");
     
     // Remove all admin-specific links and their parents
-    const toolsLinks = document.querySelectorAll('a[href="TOOLS"], a[href="DATA-BOARD"]');
+    const toolsLinks = document.querySelectorAll('a[href="TOOLS"], a[href="ADMINBOARD"]');
     toolsLinks.forEach(link => {
       const buttonParent = link.closest('button');
       if (buttonParent) buttonParent.remove();
