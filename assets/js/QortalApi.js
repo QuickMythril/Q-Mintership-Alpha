@@ -797,17 +797,35 @@ async function loadImageHtml(service, name, identifier, filename, mimeType) {
 
 const fetchAndSaveAttachment = async (service, name, identifier, filename, mimeType) => {
     const url = `${baseUrl}/arbitrary/${service}/${name}/${identifier}`;
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      await qortalRequest({
-        action: "SAVE_FILE",
-        blob,
-        filename: filename,
-        mimeType
-      });
-    } catch (error) {
-      console.error("Error fetching or saving the attachment:", error);
+    if ((service === "FILE_PRIVATE") || (service === "MAIL_PRIVATE")) {
+        service = "FILE_PRIVATE" || service
+        try{
+            const encryptedBase64Data = await fetchFileBase64(service, name, identifier)
+            const decryptedBase64 = await decryptObject(encryptedBase64Data)
+            const fileBlob = new Blob([decryptedBase64], { type: mimeType });
+            await qortalRequest({
+                action: "SAVE_FILE",
+                blob: fileBlob,
+                filename,
+                mimeType
+              });
+            
+        }catch (error) {
+            console.error("Error fetching ro saving encrypted attachment",error)
+        }
+    }else{
+        try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        await qortalRequest({
+            action: "SAVE_FILE",
+            blob,
+            filename: filename,
+            mimeType
+        });
+        } catch (error) {
+        console.error("Error fetching or saving the attachment:", error);
+        }
     }
 }
 

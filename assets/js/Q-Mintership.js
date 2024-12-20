@@ -887,6 +887,6 @@ function startPollingForNewMessages() {
     if (activeRoom) {
       await loadMessagesFromQDN(activeRoom, currentPage, true);
     }
-  }, 20000);
+  }, 40000);
 }
 
