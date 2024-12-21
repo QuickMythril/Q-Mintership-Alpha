@@ -28,9 +28,20 @@ const uid = async () => {
     console.log('Generated uid:', result);
     return result;
 };
+// a non-async version of the uid function, in case non-async functions need it. Ultimately we can probably remove uid but need to ensure no apps are using it asynchronously first. so this is kept for that purpose for now.
+const randomID = () => {
+    console.log('randomID non-async');
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    const charactersLength = characters.length;
+    for (let i = 0; i < 6; i++) {
+        result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    };
+    console.log('Generated uid:', result);
+    return result;
+}
 // Turn a unix timestamp into a human-readable date
 const timestampToHumanReadableDate = async(timestamp) => {
-    console.log('timestampToHumanReadableDate called');
     const date = new Date(timestamp);
     const day = date.getDate();
     const month = date.getMonth() + 1;
@@ -45,7 +56,6 @@ const timestampToHumanReadableDate = async(timestamp) => {
 };
 // Base64 encode a string
 const base64EncodeString = async (str) => {
-    console.log('base64EncodeString called');
     const encodedString = btoa(String.fromCharCode.apply(null, new Uint8Array(new TextEncoder().encode(str).buffer)));
     console.log('Encoded string:', encodedString);
     return encodedString;
@@ -119,7 +129,6 @@ const userState = {
 // USER-RELATED QORTAL CALLS ------------------------------------------
 // Obtain the address of the authenticated user checking userState.accountAddress first.
 const getUserAddress = async () => {
-    console.log('getUserAddress called');
     try {
         if (userState.accountAddress) {
             console.log('User address found in state:', userState.accountAddress);
@@ -778,56 +787,112 @@ const fetchFileBase64 = async (service, name, identifier) => {
 
 async function loadImageHtml(service, name, identifier, filename, mimeType) {
     try {
-      const url = `${baseUrl}/arbitrary/${service}/${name}/${identifier}`;
-      // Fetch the file as a blob
-      const response = await fetch(url);
-      // Convert the response to a Blob
-      const fileBlob = new Blob([response], { type: mimeType });
-      // Create an Object URL from the Blob
-      const objectUrl = URL.createObjectURL(fileBlob);
-      // Use the Object URL as the image source
-      const attachmentHtml = `<div class="attachment"><img src="${objectUrl}" alt="${filename}" class="inline-image"></div>`;
-  
-      return attachmentHtml;
-  
+        const url = `${baseUrl}/arbitrary/${service}/${name}/${identifier}`;
+        // Fetch the file as a blob
+        const response = await fetch(url);
+        // Convert the response to a Blob
+        const fileBlob = new Blob([response], { type: mimeType });
+        // Create an Object URL from the Blob
+        const objectUrl = URL.createObjectURL(fileBlob);
+        // Use the Object URL as the image source
+        const attachmentHtml = `<div class="attachment"><img src="${objectUrl}" alt="${filename}" class="inline-image"></div>`;
+
+        return attachmentHtml;
+
     } catch (error) {
-      console.error("Error fetching the image:", error);
+        console.error("Error fetching the image:", error);
     }
 }
 
 const fetchAndSaveAttachment = async (service, name, identifier, filename, mimeType) => {
-    const url = `${baseUrl}/arbitrary/${service}/${name}/${identifier}`;
-    if ((service === "FILE_PRIVATE") || (service === "MAIL_PRIVATE")) {
-        service = "FILE_PRIVATE" || service
-        try{
-            const encryptedBase64Data = await fetchFileBase64(service, name, identifier)
-            const decryptedBase64 = await decryptObject(encryptedBase64Data)
-            const fileBlob = new Blob([decryptedBase64], { type: mimeType });
+    try {
+        if (!filename || !mimeType) {
+            console.error("Filename and mimeType are required");
+            return;
+        }
+        let url = `${baseUrl}/arbitrary/${service}/${name}/${identifier}?async=true&attempts=5`
+
+        if (service === "MAIL_PRIVATE") {
+            service = "FILE_PRIVATE";
+        }
+        if (service === "FILE_PRIVATE") {
+            const urlPrivate = `${baseUrl}/arbitrary/${service}/${name}/${identifier}?encoding=base64&async=true&attempts=5`
+            const response = await fetch(urlPrivate,{
+                method: 'GET',
+                headers: { 'accept': 'text/plain' }
+            })
+            if (!response.ok) {
+                throw new Error(`File not found (HTTP ${response.status}): ${urlPrivate}`)
+            }
+
+            const encryptedBase64Data = response
+            console.log("Fetched Base64 Data:", encryptedBase64Data)
+
+            // const sanitizedBase64 = encryptedBase64Data.replace(/[\r\n]+/g, '')
+            const decryptedData = await decryptObject(encryptedBase64Data)
+            console.log("Decrypted Data:", decryptedData);
+
+            const fileBlob = new Blob((decryptedData), { type: mimeType })
+
             await qortalRequest({
                 action: "SAVE_FILE",
                 blob: fileBlob,
                 filename,
-                mimeType
-              });
-            
-        }catch (error) {
-            console.error("Error fetching ro saving encrypted attachment",error)
+                mimeType,
+            });
+            console.log("Encrypted file saved successfully:", filename)
+        } else {
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {'accept': 'text/plain'}
+            });
+            if (!response.ok) {
+                throw new Error(`File not found (HTTP ${response.status}): ${url}`)
+            }
+
+            const blob = await response.blob()
+            await qortalRequest({
+                action: "SAVE_FILE",
+                blob,
+                filename,
+                mimeType,
+            })
+            console.log("File saved successfully:", filename)
         }
-    }else{
-        try {
-        const response = await fetch(url);
-        const blob = await response.blob();
-        await qortalRequest({
-            action: "SAVE_FILE",
-            blob,
-            filename: filename,
-            mimeType
-        });
-        } catch (error) {
-        console.error("Error fetching or saving the attachment:", error);
-        }
+    } catch (error) {
+        console.error(
+            `Error fetching or saving attachment (service: ${service}, name: ${name}, identifier: ${identifier}):`,
+            error
+        );
     }
+};
+
+const fetchEncryptedImageHtml = async (service, name, identifier, filename, mimeType) => {
+    const urlPrivate = `${baseUrl}/arbitrary/${service}/${name}/${identifier}?encoding=base64&async=true&attempts=5`
+        const response = await fetch(urlPrivate,{
+            method: 'GET',
+            headers: { 'accept': 'text/plain' }
+        })
+        if (!response.ok) {
+            throw new Error(`File not found (HTTP ${response.status}): ${urlPrivate}`)
+        }
+        //obtain the encrypted base64 of the image
+        const encryptedBase64Data = response
+        console.log("Fetched Base64 Data:", encryptedBase64Data)
+        //decrypt the encrypted base64 object
+        const decryptedData = await decryptObject(encryptedBase64Data)
+        console.log("Decrypted Data:", decryptedData);
+        //turn the decrypted object into a blob/uint8 array and specify mimetype //todo check if the uint8Array is needed or not. I am guessing not.
+        const fileBlob = new Blob((decryptdData), { type: mimeType })
+        //create the URL for the decrypted file blob
+        const objectUrl = URL.createObjectURL(fileBlob)
+        //create the HTML from the file blob URL.
+        const attachmentHtml = `<div class="attachment"><img src="${objectUrl}" alt="${filename}" class="inline-image"></div>`;
+
+        return attachmentHtml
 }
+
 
 const renderData = async (service, name, identifier) => {
     console.log('renderData called');

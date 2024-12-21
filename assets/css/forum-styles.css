@@ -639,20 +639,20 @@ body {
   transition: transform 0.2s ease-in-out;
 } */
 .minter-card{
-  background-color: #1e1e2e;
+  background-color: #0c1314;
   flex: auto;
   display: flex;
   min-width: 22rem;
   /* max-width: 22rem; */
   max-width: calc(30% - 3rem);
   color: #ffffff;
-  border: 1px solid #333;
+  border: 1px solid #6c8389;
   border-radius: 12px;
   padding: 1vh;
   min-height: 30vh;
   max-height: auto;
   margin: 1vh;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 10px rgba(207, 214, 255, 0.31);
   font-family: 'Arial', sans-serif;
   transition: transform 0.2s ease-in-out;
   flex-direction: column;
@@ -961,7 +961,7 @@ body {
   color: #ffffff;
   border: none;
   border-radius: 8px;
-  padding: 1vh 1.7rem;
+  padding: 1vh 1.1rem;
   cursor: pointer;
   transition: background-color 0.3s;
 }
@@ -975,7 +975,7 @@ body {
   color: #ffffff;
   border: none;
   border-radius: 8px;
-  padding: 1.0vh 1.7rem;
+  padding: 1.0vh 1.1rem;
   cursor: pointer;
   transition: background-color 0.3s;
 }

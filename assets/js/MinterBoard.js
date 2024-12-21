@@ -17,11 +17,13 @@ const loadMinterBoardPage = async () => {
 
   // Add the "Minter Board" content
   const mainContent = document.createElement("div");
+  const publishButtonColor = generateDarkPastelBackgroundBy("MinterBoardPublishButton")
+  const minterBoardNameColor = generateDarkPastelBackgroundBy(randomID)
   mainContent.innerHTML = `
     <div class="minter-board-main" style="padding: 20px; text-align: center;">
-      <h1 style="color: lightblue;">Minter Board</h1>
-      <p style="font-size: 1.25em;"> The Minter Board is a place to publish information about yourself in order to obtain support from existing Minters and Minter Admins on the Qortal network. You may publish a header, content, and links to other QDN-published content in order to support you in your mission. Minter Admins and Existing Minters will then support you (or not) by way of a vote on your card. Card details you publish, along with existing poll results, and comments from others, will be displayed here. Good Luck on your Qortal journey to becoming a minter!</p>
-      <button id="publish-card-button" class="publish-card-button" style="margin: 20px; padding: 10px;">Publish Minter Card</button>
+      <h1 style="color: ${minterBoardNameColor};">Minter Board</h1>
+      <p style="font-size: 1.25em;"> Publish a Minter Card with Information, and obtain and view the support of the community. Welcome to the Minter Board!</p>
+      <button id="publish-card-button" class="publish-card-button" style="margin: 20px; padding: 10px; background-color: ${publishButtonColor}">Publish Minter Card</button>
       <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Cards</button>
       <div id="cards-container" class="cards-container" style="margin-top: 20px;"></div>
       <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
@@ -187,9 +189,11 @@ const loadCards = async () => {
     
         // Fetch poll results
         const pollResults = await fetchPollResults(cardDataResponse.poll);
-    
+        const BgColor = generateDarkPastelBackgroundBy(card.name)
         // Generate final card HTML
-        const finalCardHTML = await createCardHTML(cardDataResponse, pollResults, card.identifier);
+        const commentCount = await countComments(card.identifier)
+        const finalCardHTML = await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, BgColor);
+        
         replaceSkeleton(card.identifier, finalCardHTML);
       } catch (error) {
         console.error(`Error processing card ${card.identifier}:`, error);
@@ -222,6 +226,7 @@ const createSkeletonCardHTML = (cardIdentifier) => {
   return `
     <div id="skeleton-${cardIdentifier}" class="skeleton-card" style="padding: 10px; border: 1px solid gray; margin: 10px 0;">
       <div style="display: flex; align-items: center;">
+        <div><p style="color:rgb(174, 174, 174)">LOADING CARD...</p></div>
         <div style="width: 50px; height: 50px; background-color: #ccc; border-radius: 50%;"></div>
         <div style="margin-left: 10px;">
           <div style="width: 120px; height: 20px; background-color: #ccc; margin-bottom: 5px;"></div>
@@ -229,7 +234,7 @@ const createSkeletonCardHTML = (cardIdentifier) => {
         </div>
       </div>
       <div style="margin-top: 10px;">
-        <div style="width: 100%; height: 40px; background-color: #eee;"></div>
+        <div style="width: 100%; height: 80px; background-color: #eee; color:rgb(17, 24, 28); padding: 0.22vh"><p>PLEASE BE PATIENT</p><p style="color: #11121c"> While data loads from QDN...</div>
       </div>
     </div>
   `;
@@ -530,6 +535,22 @@ const toggleComments = async (cardIdentifier) => {
   }
 };
 
+const countComments = async (cardIdentifier) => {
+  try {
+    const response = await qortalRequest({
+      action: 'SEARCH_QDN_RESOURCES',
+      service: 'BLOG_POST',
+      query: `comment-${cardIdentifier}`,
+      mode: "ALL"
+    });
+    // Just return the count; no need to decrypt each comment here
+    return Array.isArray(response) ? response.length : 0;
+  } catch (error) {
+    console.error(`Error fetching comment count for ${cardIdentifier}:`, error);
+    return 0;
+  }
+};
+
 const createModal = async () => {
   const modalHTML = `
     <div id="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000;">
@@ -563,22 +584,63 @@ const processLink = async (link) => {
   if (link.startsWith('qortal://')) {
     const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/);
     if (match) {
-      const firstParam = match[1].toUpperCase(); // Convert to uppercase
-      const remainingPath = match[2] || ""; // Rest of the URL
-      // Perform any asynchronous operation if necessary
-      await new Promise(resolve => setTimeout(resolve, 10)); // Simulating async operation
-      return `/render/${firstParam}${remainingPath}`;
+      const firstParam = match[1].toUpperCase(); 
+      const remainingPath = match[2] || ""; 
+      const themeColor = window._qdnTheme || 'default'; // Fallback to 'default' if undefined
+
+      // Simulating async operation if needed
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      // Append theme as a query parameter
+      return `/render/${firstParam}${remainingPath}?theme=${themeColor}`;
     }
   }
-  return link; // Return unchanged if not a Qortal link
-}
+  return link;
+};
+
+// Hash the name and map it to a dark pastel color
+const generateDarkPastelBackgroundBy = (name) => {
+  // 1) Basic string hashing
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash << 5) - hash + name.charCodeAt(i);
+    hash |= 0; // Convert to 32-bit integer
+  }
+  const safeHash = Math.abs(hash);
+
+  // 2) Restrict hue to a 'blue-ish' range (150..270 = 120 degrees total)
+  //    We'll define a certain number of hue steps in that range.
+  const hueSteps = 69.69; // e.g., 12 steps
+  const hueIndex = safeHash % hueSteps; 
+  // Each step is 120 / (hueSteps - 1) or so:
+  // but a simpler approach is 120 / hueSteps. It's okay if we don't use the extreme ends exactly.
+  const hueRange = 240; 
+  const hue = 22.69 + (hueIndex * (hueRange / hueSteps)); 
+  // This yields values like 150, 160, 170, ... up to near 270
+
+  // 3) Satura­tion:
+  const satSteps = 13.69; 
+  const satIndex = safeHash % satSteps;
+  const saturation = 18 + (satIndex * 1.333);
+
+  // 4) Lightness:
+  const lightSteps = 3.69; 
+  const lightIndex = safeHash % lightSteps;
+  const lightness = 7 + lightIndex;
+
+  // 5) Return the HSL color string
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+};
+
+
 
 
 // Create the overall Minter Card HTML -----------------------------------------------
-const createCardHTML = async (cardData, pollResults, cardIdentifier) => {
+const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, BgColor) => {
   const { header, content, links, creator, timestamp, poll } = cardData;
   const formattedDate = new Date(timestamp).toLocaleString();
-  const avatarUrl = `/arbitrary/THUMBNAIL/${creator}/qortal_avatar`;
+  // const avatarUrl = `/arbitrary/THUMBNAIL/${creator}/qortal_avatar`;
+  const avatarHtml = await getMinterAvatar(creator)
   const linksHTML = links.map((link, index) => `
     <button onclick="openModal('${link}')">
       ${`Link ${index + 1} - ${link}`}
@@ -590,21 +652,21 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier) => {
   const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0 } = await calculatePollResults(pollResults, minterGroupMembers, minterAdmins)
   await createModal()
   return `
-  <div class="minter-card">
+  <div class="minter-card" style="background-color: ${BgColor}">
     <div class="minter-card-header">
-      <img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; align-self: center;">
+      ${avatarHtml}
       <h3>${creator}</h3>
       <p>${header}</p>
     </div>
-    <div class="support-header"><h5>Minter Post:</h5></div>
+    <div class="support-header"><h5>MINTER'S POST</h5></div>
     <div class="info">
       ${content}
     </div>
-    <div class="support-header"><h5>Minter Links:</h5></div>
+    <div class="support-header"><h5>MINTER'S LINKS</h5></div>
     <div class="info-links">
       ${linksHTML}
     </div>
-    <div class="results-header support-header"><h5>Current Results:</h5></div>
+    <div class="results-header support-header"><h5>CURRENT RESULTS</h5></div>
     <div class="minter-card-results">
       <div class="admin-results">
         <span class="admin-yes">Admin Yes: ${adminYes}</span>
@@ -616,14 +678,18 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier) => {
       </div>
       <div class="total-results">
         <span class="total-yes">Total Yes: ${totalYes}</span>
+        <span class="total-yes">Weight: ${totalYesWeight}</span>
         <span class="total-no">Total No: ${totalNo}</span>
+        <span class="total-no">Weight: ${totalNoWeight}</span>
       </div>
     </div>
-    <div class="support-header"><h5>Support Minter?</h5></div> 
+    <div class="support-header"><h5>SUPPORT</h5><h5 style="color: #ffae42;">${creator}</h5>
+    <p style="color: #c7c7c7; font-size: .65rem; margin-top: 1vh">(click COMMENTS button to open/close card comments)</p>
+    </div>
     <div class="actions">
       <div class="actions-buttons">
         <button class="yes" onclick="voteYesOnPoll('${poll}')">YES</button>
-        <button class="comment" onclick="toggleComments('${cardIdentifier}')">COMMENTS</button>
+        <button class="comment" onclick="toggleComments('${cardIdentifier}')">COMMENTS (${commentCount})</button>
         <button class="no" onclick="voteNoOnPoll('${poll}')">NO</button>
       </div>
     </div>
@@ -632,7 +698,7 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier) => {
       <textarea id="new-comment-${cardIdentifier}" placeholder="Write a comment..." style="width: 100%; margin-top: 10px;"></textarea>
       <button onclick="postComment('${cardIdentifier}')">Post Comment</button>
     </div>
-    <p style="font-size: 12px; color: gray;">Published by: ${creator} on ${formattedDate}</p>
+    <p style="font-size: 0.75rem; margin-top: 3vh; color: #4496a1">By: ${creator} - ${formattedDate}</p>
   </div>
   `;
 }

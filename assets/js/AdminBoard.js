@@ -242,9 +242,9 @@ const fetchAllEncryptedCards = async () => {
         // Fetch poll results
         const pollResults = await fetchPollResults(decryptedCardData.poll);
         const minterNameFromIdentifier = await extractCardsMinterName(card.identifier);
-        const commentCount = await getCommentCount(card.identifier);
+        const encryptedCommentCount = await getEncryptedCommentCount(card.identifier);
         // Generate final card HTML
-        const finalCardHTML = await createEncryptedCardHTML(decryptedCardData, pollResults, card.identifier, commentCount);
+        const finalCardHTML = await createEncryptedCardHTML(decryptedCardData, pollResults, card.identifier, encryptedCommentCount);
         replaceEncryptedSkeleton(card.identifier, finalCardHTML);
       } catch (error) {
         console.error(`Error processing card ${card.identifier}:`, error);
@@ -491,7 +491,7 @@ const publishEncryptedCard = async () => {
   }
 }
 
-const getCommentCount = async (cardIdentifier) => {
+const getEncryptedCommentCount = async (cardIdentifier) => {
   try {
     const response = await qortalRequest({
       action: 'SEARCH_QDN_RESOURCES',
@@ -692,26 +692,63 @@ const closeLinkDisplayModal = async () => {
   modalContent.src = ''; // Clear the iframe source
 }
 
+// const processQortalLinkForRendering = async (link) => {
+//   if (link.startsWith('qortal://')) {
+//     const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/);
+//     if (match) {
+//       const firstParam = match[1].toUpperCase(); // Convert to uppercase
+//       const remainingPath = match[2] || ""; // Rest of the URL
+//       // Perform any asynchronous operation if necessary
+//       await new Promise(resolve => setTimeout(resolve, 10)); // Simulating async operation
+//       return `/render/${firstParam}${remainingPath}`;
+//     }
+//   }
+//   return link; // Return unchanged if not a Qortal link
+// }
+
 const processQortalLinkForRendering = async (link) => {
   if (link.startsWith('qortal://')) {
     const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/);
     if (match) {
-      const firstParam = match[1].toUpperCase(); // Convert to uppercase
-      const remainingPath = match[2] || ""; // Rest of the URL
-      // Perform any asynchronous operation if necessary
-      await new Promise(resolve => setTimeout(resolve, 10)); // Simulating async operation
-      return `/render/${firstParam}${remainingPath}`;
+      const firstParam = match[1].toUpperCase(); 
+      const remainingPath = match[2] || ""; 
+      const themeColor = window._qdnTheme || 'default'; // Fallback to 'default' if undefined
+
+      // Simulating async operation if needed
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
+      // Append theme as a query parameter
+      return `/render/${firstParam}${remainingPath}?theme=${themeColor}`;
     }
   }
-  return link; // Return unchanged if not a Qortal link
+  return link;
+};
+
+async function getMinterAvatar(minterName) {
+  const avatarUrl = `/arbitrary/THUMBNAIL/${minterName}/qortal_avatar`;
+  
+  try {
+    const response = await fetch(avatarUrl, { method: 'HEAD' });
+    if (response.ok) {
+      // Avatar exists, return the image HTML
+      return `<img src="${avatarUrl}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; align-self: center;">`;
+    } else {
+      // Avatar not found or no permission
+      return '';
+    }
+  } catch (error) {
+    console.error('Error checking avatar availability:', error);
+    return '';
+  }
 }
 
 // Create the overall Minter Card HTML -----------------------------------------------
 const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, commentCount) => {
   const { minterName, header, content, links, creator, timestamp, poll } = cardData;
   const formattedDate = new Date(timestamp).toLocaleString();
-  const minterAvatar = `/arbitrary/THUMBNAIL/${minterName}/qortal_avatar`;
-  const creatorAvatar = `/arbitrary/THUMBNAIL/${creator}/qortal_avatar`;
+  const minterAvatar = await getMinterAvatar(minterName)
+  // const creatorAvatar = `/arbitrary/THUMBNAIL/${creator}/qortal_avatar`;
+  const creatorAvatar = await getMinterAvatar(creator)
   const linksHTML = links.map((link, index) => `
     <button onclick="openLinkDisplayModal('${link}')">
       ${`Link ${index + 1} - ${link}`}
@@ -725,50 +762,48 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
   return `
   <div class="admin-card">
     <div class="minter-card-header">
-      <h2 class="support-header"> Posted By:</h2>
-      <img src="${creatorAvatar}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; align-self: center;"> 
+      <h2 class="support-header"> Created By: </h2>
+      ${creatorAvatar}
       <h2>${creator}</h2>
-      <div class="support-header"><h5> Regarding Minter: </h5>
-      <img src="${minterAvatar}" alt="User Avatar" class="user-avatar" style="width: 50px; height: 50px; border-radius: 50%; align-self: center;">
+      <div class="support-header"><h5> REGARDING: </h5></div>
+      ${minterAvatar}
       <h3>${minterName}</h3>
       <p>${header}</p>
     </div>
     <div class="info">
       ${content}
     </div>
-    <div class="support-header"><h5>Informational Links:</h5></div>
+    <div class="support-header"><h5>LINKS</h5></div>
     <div class="info-links">
       ${linksHTML}
     </div>
-    <div class="results-header support-header"><h5>Resulting Support:</h5></div>
+    <div class="results-header support-header"><h5>CURRENT RESULTS</h5></div>
     <div class="minter-card-results">
       <div class="admin-results">
-        <span class="admin-yes">Admin Yes: ${adminYes}</span>
-        <span class="admin-no">Admin No: ${adminNo}</span>
+        <span class="admin-yes">Admin Support: ${adminYes}</span>
+        <span class="admin-no">Admin Against: ${adminNo}</span>
       </div>
       <div class="minter-results">
-        <span class="minter-yes">TBD ${minterYes}</span>
-        <span class="minter-no">TBD ${minterNo}</span>
-      </div>
-      <div class="total-results">
-        <span class="total-yes">Total Yes: ${totalYes}</span>
-        <span class="total-no">Total No: ${totalNo}</span>
+        <span class="minter-yes">Supporting Weight ${totalYesWeight}</span>
+        <span class="minter-no">Denial Weight ${totalNoWeight}</span>
       </div>
     </div>
-    <div class="support-header"><h5>Support ${minterName}?</h5></div> 
+    <div class="support-header"><h5>SUPPORT or DENY</h5><h5 style="color: #ffae42;">${minterName}</h5>
+    <p style="color: #c7c7c7; font-size: .65rem; margin-top: 1vh">(click COMMENTS button to open/close card comments)</p>
+    </div>
     <div class="actions">
       <div class="actions-buttons">
-        <button class="yes" onclick="voteYesOnPoll('${poll}')">YES</button>
+        <button class="yes" onclick="voteYesOnPoll('${poll}')">SUPPORT</button>
         <button class="comment" onclick="toggleEncryptedComments('${cardIdentifier}')">COMMENTS (${commentCount})</button>
-        <button class="no" onclick="voteNoOnPoll('${poll}')">NO</button>
+        <button class="no" onclick="voteNoOnPoll('${poll}')">OPPOSE</button>
       </div>
     </div>
     <div id="comments-section-${cardIdentifier}" class="comments-section" style="display: none; margin-top: 20px;">
       <div id="comments-container-${cardIdentifier}" class="comments-container"></div>
-      <textarea id="new-comment-${cardIdentifier}" placeholder="Write a comment..." style="width: 100%; margin-top: 10px;"></textarea>
+      <textarea id="new-comment-${cardIdentifier}" placeholder="Input your comment..." style="width: 100%; margin-top: 10px;"></textarea>
       <button onclick="postEncryptedComment('${cardIdentifier}')">Post Comment</button>
     </div>
-    <p style="font-size: 12px; color: gray;">Published by: ${creator} on ${formattedDate}</p>
+    <p style="font-size: 0.75rem; margin-top: 1vh; color: #4496a1">By: ${creator} - ${formattedDate}</p>
   </div>
   `;
 }

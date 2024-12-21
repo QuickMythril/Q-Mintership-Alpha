@@ -550,7 +550,7 @@ const showSuccessNotification = () => {
 
 // Generate unique attachment ID
 const generateAttachmentID = (room, fileIndex = null) => {
-  const baseID = room === "admins" ? `${messageAttachmentIdentifierPrefix}-${room}-e-${Date.now()}` : `${messageAttachmentIdentifierPrefix}-${room}-${Date.now()}`;
+  const baseID = room === "admins" ? `${messageAttachmentIdentifierPrefix}-${room}-e-${randomID()}` : `${messageAttachmentIdentifierPrefix}-${room}-${randomID()}`;
   return fileIndex !== null ? `${baseID}-${fileIndex}` : baseID;
 };
 
@@ -750,7 +750,7 @@ const isMessageNew = (message, mostRecentMessage) => {
 
 const buildMessageHTML = (message, fetchMessages, room, isNewMessage) => {
   const replyHtml = buildReplyHtml(message, fetchMessages);
-  const attachmentHtml = buildAttachmentHtml(message, room);
+  const attachmentHtml = buildAttachmentHtml(message, room);  
   const avatarUrl = `/arbitrary/THUMBNAIL/${message.name}/qortal_avatar`;
 
   return `
@@ -770,123 +770,126 @@ const buildMessageHTML = (message, fetchMessages, room, isNewMessage) => {
       </div>
       <button class="reply-button" data-message-identifier="${message.identifier}">Reply</button>
     </div>
-  `;
-};
+  `
+}
 
 const buildReplyHtml = (message, fetchMessages) => {
-  if (!message.replyTo) return "";
+  if (!message.replyTo) return ""
 
-  const repliedMessage = fetchMessages.find(m => m && m.identifier === message.replyTo);
-  if (!repliedMessage) return "";
+  const repliedMessage = fetchMessages.find(m => m && m.identifier === message.replyTo)
+  if (!repliedMessage) return ""
 
   return `
     <div class="reply-message" style="border-left: 2px solid #ccc; margin-bottom: 0.5vh; padding-left: 1vh;">
       <div class="reply-header">In reply to: <span class="reply-username">${repliedMessage.name}</span> <span class="reply-timestamp">${repliedMessage.date}</span></div>
       <div class="reply-content">${repliedMessage.content}</div>
     </div>
-  `;
-};
+  `
+}
 
 const buildAttachmentHtml = (message, room) => {
-  if (!message.attachments || message.attachments.length === 0) return "";
+  if (!message.attachments || message.attachments.length === 0) return ""
 
-  return message.attachments.map(attachment => buildSingleAttachmentHtml(attachment, room)).join("");
-};
+  return message.attachments.map(attachment => buildSingleAttachmentHtml(attachment, room)).join("")
+}
 
 const buildSingleAttachmentHtml = (attachment, room) => {
   if (room !== "admins" && attachment.mimeType && attachment.mimeType.startsWith('image/')) {
-    const imageUrl = `/arbitrary/${attachment.service}/${attachment.name}/${attachment.identifier}`;
+    const imageUrl = `/arbitrary/${attachment.service}/${attachment.name}/${attachment.identifier}`
     return `
       <div class="attachment">
         <img src="${imageUrl}" alt="${attachment.filename}" class="inline-image"/>
       </div>
-    `;
+    `
+  } else if 
+    (room === "admins" && attachment.mimeType && attachment.mimeType.startsWith('image/')) {
+    return fetchEncryptedImageHtml(attachment)
+
   } else {
-    // Non-image attachment
     return `
       <div class="attachment">
         <button onclick="fetchAndSaveAttachment('${attachment.service}', '${attachment.name}', '${attachment.identifier}', '${attachment.filename}', '${attachment.mimeType}')">
           Download ${attachment.filename}
         </button>
       </div>
-    `;
+    `
   }
-};
+}
 
 const scrollToNewMessages = (firstNewMessageIdentifier) => {
-  const newMessageElement = document.querySelector(`.message-item[data-identifier="${firstNewMessageIdentifier}"]`);
+  const newMessageElement = document.querySelector(`.message-item[data-identifier="${firstNewMessageIdentifier}"]`)
   if (newMessageElement) {
-    newMessageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    newMessageElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
-};
+}
 
 const updateLatestMessageIdentifiers = (room, mostRecentMessage) => {
-  latestMessageIdentifiers[room] = mostRecentMessage;
-  localStorage.setItem("latestMessageIdentifiers", JSON.stringify(latestMessageIdentifiers));
-};
+  latestMessageIdentifiers[room] = mostRecentMessage
+  localStorage.setItem("latestMessageIdentifiers", JSON.stringify(latestMessageIdentifiers))
+}
 
 const handleReplyLogic = (fetchMessages) => {
-  const replyButtons = document.querySelectorAll(".reply-button");
+  const replyButtons = document.querySelectorAll(".reply-button")
   replyButtons.forEach(button => {
     button.addEventListener("click", () => {
-      const replyToMessageIdentifier = button.dataset.messageIdentifier;
-      const repliedMessage = fetchMessages.find(m => m && m.identifier === replyToMessageIdentifier);
+      const replyToMessageIdentifier = button.dataset.messageIdentifier
+      const repliedMessage = fetchMessages.find(m => m && m.identifier === replyToMessageIdentifier)
       if (repliedMessage) {
-        showReplyPreview(repliedMessage);
+        showReplyPreview(repliedMessage)
       }
-    });
-  });
-};
+    })
+  })
+}
 
 const showReplyPreview = (repliedMessage) => {
-  replyToMessageIdentifier = repliedMessage.identifier;
+  replyToMessageIdentifier = repliedMessage.identifier
 
-  const replyContainer = document.createElement("div");
-  replyContainer.className = "reply-container";
+  const replyContainer = document.createElement("div")
+  replyContainer.className = "reply-container"
   replyContainer.innerHTML = `
     <div class="reply-preview" style="border: 1px solid #ccc; padding: 1vh; margin-bottom: 1vh; background-color: black; color: white;">
       <strong>Replying to:</strong> ${repliedMessage.content}
       <button id="cancel-reply" style="float: right; color: red; background-color: black; font-weight: bold;">Cancel</button>
     </div>
-  `;
+  `
 
   if (!document.querySelector(".reply-container")) {
-    const messageInputSection = document.querySelector(".message-input-section");
+    const messageInputSection = document.querySelector(".message-input-section")
     if (messageInputSection) {
-      messageInputSection.insertBefore(replyContainer, messageInputSection.firstChild);
+      messageInputSection.insertBefore(replyContainer, messageInputSection.firstChild)
       document.getElementById("cancel-reply").addEventListener("click", () => {
-        replyToMessageIdentifier = null;
-        replyContainer.remove();
-      });
+        replyToMessageIdentifier = null
+        replyContainer.remove()
+      })
     }
   }
 
-  const messageInputSection = document.querySelector(".message-input-section");
-  const editor = document.querySelector(".ql-editor");
+  const messageInputSection = document.querySelector(".message-input-section")
+  const editor = document.querySelector(".ql-editor")
 
   if (messageInputSection) {
-    messageInputSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    messageInputSection.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   if (editor) {
-    editor.focus();
+    editor.focus()
   }
-};
+}
 
 const updatePaginationControls = async (room, limit) => {
-  const totalMessages = room === "admins" ? await searchAllCountOnly(`${messageIdentifierPrefix}-${room}`, room) : await searchAllCountOnly(`${messageIdentifierPrefix}-${room}-e`, room)
-  renderPaginationControls(room, totalMessages, limit);
-};
+  const totalMessages = room === "admins" ? await searchAllCountOnly(`${messageIdentifierPrefix}-${room}-e`, room) : await searchAllCountOnly(`${messageIdentifierPrefix}-${room}`, room)
+  renderPaginationControls(room, totalMessages, limit)
+}
 
 
 
 // Polling function to check for new messages without clearing existing ones
 function startPollingForNewMessages() {
   setInterval(async () => {
-    const activeRoom = document.querySelector('.room-title')?.innerText.toLowerCase().split(" ")[0];
+    const activeRoom = document.querySelector('.room-title')?.innerText.toLowerCase().split(" ")[0]
     if (activeRoom) {
-      await loadMessagesFromQDN(activeRoom, currentPage, true);
+      await loadMessagesFromQDN(activeRoom, currentPage, true)
     }
-  }, 40000);
+  }, 40000)
 }
 
