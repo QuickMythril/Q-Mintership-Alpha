@@ -1,5 +1,5 @@
 // NOTE - Change isTestMode to false prior to actual release ---- !important - You may also change identifier if you want to not show older cards.
-const isEncryptedTestMode = true
+const isEncryptedTestMode = false
 const encryptedCardIdentifierPrefix = "card-MAC"
 let isExistingEncryptedCard = false
 let existingDecryptedCardData = {}
@@ -9,6 +9,7 @@ let existingCardMinterNames = []
 let isTopic = false
 let attemptLoadAdminDataCount = 0
 let adminMemberCount = 0
+let adminPublicKeys = []
 
 console.log("Attempting to load AdminBoard.js");
 
@@ -112,7 +113,7 @@ const loadAdminBoardPage = async () => {
 const updateOrSaveAdminGroupsDataLocally = async () => {
   try {
     // Fetch the array of admin public keys
-    const verifiedAdminPublicKeys = await fetchAdminGroupsMembersPublicKeys();
+    const verifiedAdminPublicKeys = await fetchAdminGroupsMembersPublicKeys()
 
     // Build an object containing the count and the array
     const adminData = {
@@ -120,12 +121,14 @@ const updateOrSaveAdminGroupsDataLocally = async () => {
       publicKeys: verifiedAdminPublicKeys
     };
 
-    // Stringify and save to localStorage
-    localStorage.setItem('savedAdminData', JSON.stringify(adminData));
+    adminPublicKeys = verifiedAdminPublicKeys
 
-    console.log('Admin public keys saved locally:', adminData);
+    // Stringify and save to localStorage
+    localStorage.setItem('savedAdminData', JSON.stringify(adminData))
+
+    console.log('Admin public keys saved locally:', adminData)
   } catch (error) {
-    console.error('Error fetching/storing admin public keys:', error);
+    console.error('Error fetching/storing admin public keys:', error)
     attemptLoadAdminDataCount++
   }
 };
@@ -146,7 +149,10 @@ const loadOrFetchAdminGroupsData = async () => {
     adminMemberCount = parsedData.keysCount
     adminPublicKeys = parsedData.publicKeys
 
-    console.log(`Loaded admins 'keysCount'=${adminMemberCount}, adminKeys=`, adminPublicKeys)
+    console.log(typeof adminPublicKeys); // Should be "object"
+    console.log(Array.isArray(adminPublicKeys))
+
+    console.log(`Loaded admins 'keysCount'=${adminMemberCount}, publicKeys=`, adminPublicKeys)
     attemptLoadAdminDataCount = 0
 
     return parsedData; // and return { adminMemberCount, adminKeys } to the caller
@@ -526,7 +532,22 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
       base64CardData = btoa(JSON.stringify(cardData));
     }
 
-    const verifiedAdminPublicKeys = (adminPublicKeys) ? adminPublicKeys : loadOrFetchAdminGroupsData().publicKeys
+    let verifiedAdminPublicKeys = adminPublicKeys
+
+    if ((!verifiedAdminPublicKeys) || verifiedAdminPublicKeys.length <= 5 || !Array.isArray(verifiedAdminPublicKeys)) {
+      console.log(`adminPublicKeys variable failed check, attempting to load from localStorage`,adminPublicKeys)
+      const savedAdminData = localStorage.getItem('savedAdminData')
+      const parsedAdminData = JSON.parse(savedAdminData)
+      const loadedAdminKeys = parsedAdminData.publicKeys
+
+      if ((!loadedAdminKeys) || (!Array.isArray(loadedAdminKeys)) || (loadedAdminKeys.length === 0)){
+        console.log('loaded admin keys from localStorage failed, falling back to API call...')
+        verifiedAdminPublicKeys = await fetchAdminGroupsMembersPublicKeys()
+      }
+
+      verifiedAdminPublicKeys = loadedAdminKeys
+
+    }
 
     await qortalRequest({
       action: "PUBLISH_QDN_RESOURCE",
@@ -605,8 +626,9 @@ const postEncryptedComment = async (cardIdentifier) => {
 
   const commentIdentifier = `comment-${cardIdentifier}-${await uid()}`;
 
-  if (!Array.isArray(adminPublicKeys) || (adminPublicKeys.length === 0)) {
-    const verifiedAdminPublicKeys = await loadOrFetchAdminGroupsData().publicKeys
+  if (!Array.isArray(adminPublicKeys) || (adminPublicKeys.length === 0) || (!adminPublicKeys)) {
+    console.log('adminPpublicKeys variable failed checks, calling for admin public keys from API (comment)',adminPublicKeys)
+    const verifiedAdminPublicKeys = await fetchAdminGroupsMembersPublicKeys()
     adminPublicKeys = verifiedAdminPublicKeys
   } 
 
@@ -731,12 +753,24 @@ const calculateAdminBoardPollResults = async (pollData, minterGroupMembers, mint
 }
 
 const toggleEncryptedComments = async (cardIdentifier) => {
-  const commentsSection = document.getElementById(`comments-section-${cardIdentifier}`);
-  if (commentsSection.style.display === 'none' || !commentsSection.style.display) {
+  const commentsSection = document.getElementById(`comments-section-${cardIdentifier}`)
+  const commentButton = document.getElementById(`comment-button-${cardIdentifier}`)
+
+  if (!commentsSection || !commentButton) return;
+  const count = commentButton.dataset.commentCount; 
+  const isHidden = (commentsSection.style.display === 'none' || !commentsSection.style.display);
+
+  if (isHidden) {
+    // Show comments
+    commentButton.textContent = "LOADING...";
     await displayEncryptedComments(cardIdentifier);
     commentsSection.style.display = 'block';
+    // Change the button text to 'HIDE COMMENTS'
+    commentButton.textContent = 'HIDE COMMENTS';
   } else {
+    // Hide comments
     commentsSection.style.display = 'none';
+    commentButton.textContent = `COMMENTS (${count})`;
   }
 };
 
@@ -847,7 +881,7 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
       showTopic = false
     }
   }
-
+ 
   const cardColorCode = showTopic ? '#0e1b15' : '#151f28'
 
   const minterOrTopicHtml = ((showTopic) || (isUndefinedUser)) ? `
@@ -895,7 +929,7 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
     <div class="actions">
       <div class="actions-buttons">
         <button class="yes" onclick="voteYesOnPoll('${poll}')">YES</button>
-        <button class="comment" onclick="toggleEncryptedComments('${cardIdentifier}')">COMMENTS (${commentCount})</button>
+        <button id="comment-button-${cardIdentifier}" data-comment-count="${commentCount}" class="comment" onclick="toggleEncryptedComments('${cardIdentifier}')">COMMENTS (${commentCount})</button>
         <button class="no" onclick="voteNoOnPoll('${poll}')">NO</button>
       </div>
     </div>

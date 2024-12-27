@@ -117,6 +117,78 @@ const loadMinterBoardPage = async () => {
   await loadCards();
 }
 
+const extractMinterCardsMinterName = async (cardIdentifier) => {
+  // Ensure the identifier starts with the prefix
+  if (!cardIdentifier.startsWith(`${cardIdentifierPrefix}-`)) {
+    throw new Error('Invalid identifier format or prefix mismatch');
+  }
+  // Split the identifier into parts
+  const parts = cardIdentifier.split('-');
+  // Ensure the format has at least 3 parts
+  if (parts.length < 3) {
+    throw new Error('Invalid identifier format');
+  }
+  try {
+    const nameFromIdentifier = await searchSimple('BLOG_POST', cardIdentifier, "", 1)
+    const minterName = await nameFromIdentifier.name
+    return minterName
+  } catch (error) {
+    throw error
+  }
+}
+
+const processMinterCards = async (validMinterCards) => {
+  const latestCardsMap = new Map()
+
+  // Step 1: Filter and keep the most recent card per identifier
+  validMinterCards.forEach(card => {
+    const timestamp = card.updated || card.created || 0
+    const existingCard = latestCardsMap.get(card.identifier)
+
+    if (!existingCard || timestamp > (existingCard.updated || existingCard.created || 0)) {
+      latestCardsMap.set(card.identifier, card)
+    }
+  })
+
+  // Step 2: Extract unique cards
+  const uniqueValidCards = Array.from(latestCardsMap.values())
+
+  // Step 3: Group by minterName and select the most recent card per minterName
+  const minterNameMap = new Map()
+
+  for (const card of validMinterCards) {
+    const minterName = await extractMinterCardsMinterName(card.identifier)
+    const existingCard = minterNameMap.get(minterName)
+    const cardTimestamp = card.updated || card.created || 0
+    const existingTimestamp = existingCard?.updated || existingCard?.created || 0
+
+    // Keep only the most recent card for each minterName
+    if (!existingCard || cardTimestamp > existingTimestamp) {
+      minterNameMap.set(minterName, card)
+    }
+  }
+
+  // Step 4: Filter cards to ensure each minterName is included only once
+  const finalCards = []
+  const seenMinterNames = new Set()
+
+  for (const [minterName, card] of minterNameMap.entries()) {
+    if (!seenMinterNames.has(minterName)) {
+      finalCards.push(card)
+      seenMinterNames.add(minterName) // Mark the minterName as seen
+    }
+  }
+
+  // Step 5: Sort by the most recent timestamp
+  finalCards.sort((a, b) => {
+    const timestampA = a.updated || a.created || 0
+    const timestampB = b.updated || b.created || 0
+    return timestampB - timestampA
+  })
+
+  return finalCards
+}
+
 //Main function to load the Minter Cards ----------------------------------------
 const loadCards = async () => {
   const cardsContainer = document.getElementById("cards-container");
@@ -150,22 +222,24 @@ const loadCards = async () => {
       return;
     }
 
+    const finalCards = await processMinterCards(validCards)
+
     // Sort cards by timestamp descending (newest first)
-    validCards.sort((a, b) => {
-      const timestampA = a.updated || a.created || 0;
-      const timestampB = b.updated || b.created || 0;
-      return timestampB - timestampA;
-    });
+    // validCards.sort((a, b) => {
+    //   const timestampA = a.updated || a.created || 0;
+    //   const timestampB = b.updated || b.created || 0;
+    //   return timestampB - timestampA;
+    // });
 
     // Display skeleton cards immediately
     cardsContainer.innerHTML = "";
-    validCards.forEach(card => {
+    finalCards.forEach(card => {
       const skeletonHTML = createSkeletonCardHTML(card.identifier);
       cardsContainer.insertAdjacentHTML("beforeend", skeletonHTML);
     });
 
     // Fetch and update each card
-    validCards.forEach(async card => {
+    finalCards.forEach(async card => {
       try {
         const cardDataResponse = await qortalRequest({
           action: "FETCH_QDN_RESOURCE",
@@ -528,11 +602,23 @@ const displayComments = async (cardIdentifier) => {
 // Toggle comments from being shown or not, with passed cardIdentifier for comments being toggled --------------------
 const toggleComments = async (cardIdentifier) => {
   const commentsSection = document.getElementById(`comments-section-${cardIdentifier}`);
-  if (commentsSection.style.display === 'none' || !commentsSection.style.display) {
+  const commentButton = document.getElementById(`comment-button-${cardIdentifier}`)
+
+  if (!commentsSection || !commentButton) return;
+  const count = commentButton.dataset.commentCount; 
+  const isHidden = (commentsSection.style.display === 'none' || !commentsSection.style.display);
+
+  if (isHidden) {
+    // Show comments
+    commentButton.textContent = "LOADING...";
     await displayComments(cardIdentifier);
     commentsSection.style.display = 'block';
+    // Change the button text to 'HIDE COMMENTS'
+    commentButton.textContent = 'HIDE COMMENTS';
   } else {
+    // Hide comments
     commentsSection.style.display = 'none';
+    commentButton.textContent = `COMMENTS (${count})`;
   }
 };
 
@@ -610,14 +696,13 @@ const generateDarkPastelBackgroundBy = (name) => {
   const safeHash = Math.abs(hash);
 
   // 2) Restrict hue to a 'blue-ish' range (150..270 = 120 degrees total)
-  //    We'll define a certain number of hue steps in that range.
-  const hueSteps = 69.69; // e.g., 12 steps
+  
+  const hueSteps = 69.69; 
   const hueIndex = safeHash % hueSteps; 
-  // Each step is 120 / (hueSteps - 1) or so:
-  // but a simpler approach is 120 / hueSteps. It's okay if we don't use the extreme ends exactly.
-  const hueRange = 240; 
-  const hue = 22.69 + (hueIndex * (hueRange / hueSteps)); 
-  // This yields values like 150, 160, 170, ... up to near 270
+  
+  const hueRange = 288; 
+  const hue = 140 + (hueIndex * (hueRange / hueSteps)); 
+  
 
   // 3) Satura­tion:
   const satSteps = 13.69; 
@@ -690,7 +775,7 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
     <div class="actions">
       <div class="actions-buttons">
         <button class="yes" onclick="voteYesOnPoll('${poll}')">YES</button>
-        <button class="comment" onclick="toggleComments('${cardIdentifier}')">COMMENTS (${commentCount})</button>
+        <button class="comment" id="comment-button-${cardIdentifier}" data-comment-count="${commentCount}"  onclick="toggleComments('${cardIdentifier}')">COMMENTS (${commentCount})</button>
         <button class="no" onclick="voteNoOnPoll('${poll}')">NO</button>
       </div>
     </div>

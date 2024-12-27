@@ -651,8 +651,57 @@ const searchAllWithOffset = async (service, query, limit, offset, room) => {
       console.error("Error during SEARCH_QDN_RESOURCES:", error);
       return []; // Return empty array on error
     }
+};
+// NOTE - This function does a search and will return EITHER AN ARRAY OR A SINGLE OBJECT. if you want to guarantee a single object, pass 1 as limit. i.e. await searchSimple(service, identifier, "", 1) will return a single object.
+const searchSimple = async (service, identifier, name, limit = 20) => {
+    try {
+      let urlSuffix = `service=${service}&identifier=${identifier}&name=${name}&limit=${limit}`;
+  
+      if (name && !identifier) {
+        console.log('name only searchSimple', name);
+        urlSuffix = `service=${service}&name=${name}&limit=${limit}`;
+      } else if (!name && identifier) {
+        console.log('identifier only searchSimple', identifier);
+        urlSuffix = `service=${service}&identifier=${identifier}&limit=${limit}`;
+      } else if (!name && !identifier) {
+        console.error(`name: ${name} AND identifier: ${identifier} not passed. Must include at least one...`);
+        return null; 
+      } else {
+        console.log(`name: ${name} AND identifier: ${identifier} passed, searching by both...`);
+      }
+      
+      const response = await fetch(`${baseUrl}/arbitrary/resources/searchsimple?${urlSuffix}`, {
+        method: 'GET',
+        headers: { 'accept': 'application/json' }
+      });
+  
+      const data = await response.json();
+  
+      if (!Array.isArray(data)) {
+        console.log("searchSimple: data is not an array?", data);
+        return null;
+      }
+  
+      if (data.length === 0) {
+        console.log("searchSimple: no results found");
+        return null; // Return null when no items
+      }
+  
+      if (data.length === 1 || limit === 1) {
+        console.log("searchSimple: single result returned", data[0]);
+        return data[0]; // Return just the single object
+      }
+  
+      console.log("searchSimple: multiple results returned", data);
+      return data;
+      
+    } catch (error) {
+      console.error("error during searchSimple", error);
+      throw error; 
+    }
   };
   
+
 
 const searchAllCountOnly = async (query, room) => {
     try {

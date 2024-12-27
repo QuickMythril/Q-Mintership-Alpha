@@ -1,6 +1,5 @@
 const messageIdentifierPrefix = `mintership-forum-message`;
 const messageAttachmentIdentifierPrefix = `mintership-forum-attachment`;
-let adminPublicKeys = []
 
 // NOTE - SET adminGroups in QortalApi.js to enable admin access to forum for specific groups. Minter Admins will be fetched automatically.
 
@@ -9,7 +8,58 @@ let latestMessageIdentifiers = {}; // To keep track of the latest message in eac
 let currentPage = 0; // Track current pagination page
 let existingIdentifiers = new Set(); // Keep track of existing identifiers to not pull them more than once.
 
+let messagesById = {}
+let messageOrder =[]
+const MAX_MESSAGES = 2000
+// Key = message.identifier
+// Value = { ...the message object with timestamp, name, content, etc. }
+
 // If there is a previous latest message identifiers, use them. Otherwise, use an empty.
+
+const storeMessageInMap = (msg) => {
+  if (!msg?.identifier || !msg || !msg?.timestamp) return
+
+  messagesById[msg.identifier] = msg
+  // We will keep an array 'messageOrder' to store the messages and limit the size they take
+  messageOrder.push({ identifier: msg.identifier, timestamp: msg.timestamp })
+  messageOrder.sort((a, b) => a.timestamp - b.timestamp);
+
+  while (messageOrder.length > MAX_MESSAGES) {
+    // Remove oldest from the front
+    const oldest = messageOrder.shift();
+    // Delete from the map as well
+    delete messagesById[oldest.identifier];
+  }
+}
+
+function saveMessagesToLocalStorage() {
+  try {
+    const data = { messagesById, messageOrder };
+    localStorage.setItem("forumMessages", JSON.stringify(data));
+    console.log("Saved messages to localStorage. Count:", messageOrder.length);
+  } catch (error) {
+    console.error("Error saving to localStorage:", error);
+  }
+}
+
+function loadMessagesFromLocalStorage() {
+  try {
+    const stored = localStorage.getItem("forumMessages");
+    if (!stored) {
+      console.log("No saved messages in localStorage.");
+      return;
+    }
+    const parsed = JSON.parse(stored);
+    if (parsed.messagesById && parsed.messageOrder) {
+      messagesById = parsed.messagesById;
+      messageOrder = parsed.messageOrder;
+      console.log(`Loaded ${messageOrder.length} messages from localStorage.`);
+    }
+  } catch (error) {
+    console.error("Error loading messages from localStorage:", error);
+  }
+}
+
 if (localStorage.getItem("latestMessageIdentifiers")) {
   latestMessageIdentifiers = JSON.parse(localStorage.getItem("latestMessageIdentifiers"));
 }
@@ -48,6 +98,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // --- ADMIN CHECK ---
   await verifyUserIsAdmin();
+
+  if (userState.isAdmin && (localStorage.getItem('savedAdminData'))) {
+    console.log('saved admin data found (Q-Mintership.js), loading...')
+    const adminData = localStorage.getItem('savedAdminData')
+    const parsedAdminData = JSON.parse(adminData)
+    if (!adminPublicKeys || adminPublicKeys.length === 0 || !Array.isArray(adminPublicKeys)) {
+      console.log('no adminPublicKey variable data found and/or data did not pass checks, using fetched localStorage data...',adminPublicKeys)
+      if (parsedAdminData.publicKeys.length === 0 || !parsedAdminData.publicKeys || !Array.isArray(parsedAdminData.publicKeys)) {
+        console.log('loaded data from localStorage also did not pass checks... fetching from API...',parsedAdminData.publicKeys)
+        adminPublicKeys = await fetchAdminGroupsMembersPublicKeys()
+      } else {
+        adminPublicKeys = parsedAdminData.publicKeys
+      }
+    }
+  }
 
   if (userState.isAdmin) {
     console.log(`User is an Admin. Admin-specific buttons will remain visible.`);
@@ -285,7 +350,17 @@ const loadRoomContent = async (room) => {
   initializeQuillEditor();
   setupModalHandlers();
   setupFileInputs(room);
-  await loadMessagesFromQDN(room, currentPage);
+  //TODO - maybe turn this into its own function and put it as a button? But for now it's fine to just load the latest message's position by default I think.
+  const latestId = latestMessageIdentifiers[room]?.latestIdentifier;
+  if (latestId) {
+    const page = await findMessagePage(room, latestId, 10)
+    currentPage = page;
+    await loadMessagesFromQDN(room, currentPage)
+    scrollToMessage(latestId.latestIdentifier)
+  } else{
+    await loadMessagesFromQDN(room, currentPage)
+  }
+  ;
 };
 
 // Initialize Quill editor
@@ -572,6 +647,21 @@ const generateAttachmentID = (room, fileIndex = null) => {
 
 // --- REFACTORED LOAD MESSAGES AND HELPER FUNCTIONS ---
 
+const findMessagePage = async (room, identifier, limit) => {
+  const { service, query } = getServiceAndQuery(room)
+
+  const allMessages = await searchAllWithOffset(service, query, 0, 0, room)
+
+  const idx = allMessages.findIndex(msg => msg.identifier === identifier);
+  if (idx === -1) {
+    // Not found, default to last page or page=0
+    return 0;
+  }
+
+  return Math.floor(idx / limit)
+
+}
+
 const loadMessagesFromQDN = async (room, page, isPolling = false) => {
   try {
     const limit = 10;
@@ -601,6 +691,12 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
     let mostRecentMessage = getCurrentMostRecentMessage(room);
 
     const fetchMessages = await fetchAllMessages(response, service, room);
+
+    for (const msg of fetchMessages) {
+      if (!msg) continue;
+      storeMessageInMap(msg);
+    }
+
     const { firstNewMessageIdentifier, updatedMostRecentMessage } = await renderNewMessages(
       fetchMessages,
       existingIdentifiers,
@@ -624,6 +720,13 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
     console.error('Error loading messages from QDN:', error);
   }
 };
+
+function scrollToMessage(identifier) {
+  const targetElement = document.querySelector(`.message-item[data-identifier="${identifier}"]`);
+  if (targetElement) {
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
 
 /** Helper Functions (Arrow Functions) **/
 
@@ -684,6 +787,13 @@ const fetchAllMessages = async (response, service, room) => {
 
 // 2) fetchFullMessage is already async. We keep it async/await-based
 const fetchFullMessage = async (resource, service, room) => {
+  // 1) Skip if we already have it in memory
+  if (messagesById[resource.identifier]) {
+    // Possibly also check if the local data is "up to date," //TODO when adding 'edit' ability to messages, will also need to verify timestamp in saved data.
+    // but if you trust your local data, skip the fetch entirely.
+    console.log(`Skipping fetch. Found in local store: ${resource.identifier}`);
+    return messagesById[resource.identifier];
+  }
   try {
     // Skip if already displayed
     if (existingIdentifiers.has(resource.identifier)) {
@@ -703,7 +813,7 @@ const fetchFullMessage = async (resource, service, room) => {
     const formattedTimestamp = await timestampToHumanReadableDate(timestamp);
     const messageObject = await processMessageObject(messageResponse, room);
 
-    return {
+    const builtMsg = {
       name: resource.name,
       content: messageObject?.messageHtml || "<em>Message content missing</em>",
       date: formattedTimestamp,
@@ -712,6 +822,11 @@ const fetchFullMessage = async (resource, service, room) => {
       timestamp,
       attachments: messageObject?.attachments || [],
     };
+
+    // 3) Store it in the map so we skip future fetches
+    storeMessageInMap(builtMsg);
+
+    return builtMsg;
   } catch (error) {
     console.error(`Failed to fetch message ${resource.identifier}: ${error.message}`);
     return {
@@ -725,6 +840,46 @@ const fetchFullMessage = async (resource, service, room) => {
     };
   }
 };
+
+const fetchReplyData = async (service, name, identifier, room, replyTimestamp) => {
+  try {
+
+    console.log(`Fetching message with identifier: ${identifier}`);
+    const messageResponse = await qortalRequest({
+      action: "FETCH_QDN_RESOURCE",
+      name,
+      service,
+      identifier,
+      ...(room === "admins" ? { encoding: "base64" } : {}),
+    })
+    console.log('reply response',messageResponse)
+    
+    const messageObject = await processMessageObject(messageResponse, room)
+    console.log('reply message object',messageObject)
+    const formattedTimestamp = await timestampToHumanReadableDate(replyTimestamp)
+
+    return {
+      name,
+      content: messageObject?.messageHtml || "<em>Message content missing</em>",
+      date: formattedTimestamp,
+      identifier,
+      replyTo: messageObject?.replyTo || null,
+      timestamp: replyTimestamp,
+      attachments: messageObject?.attachments || [],
+    };
+  } catch (error) {
+    console.error(`Failed to fetch message ${identifier}: ${error.message}`)
+    return {
+      name,
+      content: "<em>Error loading message</em>",
+      date: "Unknown",
+      identifier,
+      replyTo: null,
+      timestamp: null,
+      attachments: [],
+    }
+  }
+}
 
 
 const processMessageObject = async (messageResponse, room) => {
@@ -774,7 +929,7 @@ const isMessageNew = (message, mostRecentMessage) => {
 };
 
 const buildMessageHTML = async (message, fetchMessages, room, isNewMessage) => {
-  const replyHtml = await buildReplyHtml(message, fetchMessages);
+  const replyHtml = await buildReplyHtml(message, room);
   const attachmentHtml = await buildAttachmentHtml(message, room);  
   const avatarUrl = `/arbitrary/THUMBNAIL/${message.name}/qortal_avatar`;
 
@@ -798,18 +953,57 @@ const buildMessageHTML = async (message, fetchMessages, room, isNewMessage) => {
   `
 }
 
-const buildReplyHtml = async (message, fetchMessages) => {
+const buildReplyHtml = async (message, room) => {
   if (!message.replyTo) return ""
+  const replyService = (room === "admins") ? "MAIL_PRIVATE" : "BLOG_POST";
+  const replyIdentifier = message.replyTo
 
-  const repliedMessage = fetchMessages.find(m => m && m.identifier === message.replyTo)
-  if (!repliedMessage) return ""
+  const savedRepliedToMessage = messagesById[message.replyTo];
 
-  return `
-    <div class="reply-message" style="border-left: 2px solid #ccc; margin-bottom: 0.5vh; padding-left: 1vh;">
-      <div class="reply-header">In reply to: <span class="reply-username">${repliedMessage.name}</span> <span class="reply-timestamp">${repliedMessage.date}</span></div>
-      <div class="reply-content">${repliedMessage.content}</div>
-    </div>
-  `
+  if (savedRepliedToMessage) {
+    const processedMessage = await processMessageObject(savedRepliedToMessage, room)
+    console.log('message is saved in saved message data, returning from that',savedRepliedToMessage)
+    return `
+      <div class="reply-message" style="border-left: 2px solid #ccc; margin-bottom: 0.5vh; padding-left: 1vh;">
+        <div class="reply-header">
+          In reply to: <span class="reply-username">${processedMessage.name}</span>
+          <span class="reply-timestamp">${processedMessage.date}</span>
+        </div>
+        <div class="reply-content">${processedMessage.content}</div>
+      </div>
+    `;
+  }
+  try {
+
+    const replyData = await searchSimple(replyService, replyIdentifier, "", 1)
+    if ((!replyData) || (!replyData.name)){
+      // No result found. You can either return an empty string or handle differently
+      console.log("No data found via searchSimple. Skipping reply rendering.");
+      return "";
+    }
+    const replyName = await replyData.name 
+    const replyTimestamp = await replyData.updated || await replyData.created
+    console.log('message not found in saved message data, using searchSimple', replyData)
+
+
+      // const repliedMessage = fetchMessages.find(m => m && m.identifier === message.replyTo)
+      // const repliedMessageIdentifier = message.replyTo
+      const repliedMessage = await fetchReplyData(replyService, replyName, replyIdentifier, room, replyTimestamp)
+      storeMessageInMap(repliedMessage)
+      if (!repliedMessage) return ""
+
+
+      return `
+        <div class="reply-message" style="border-left: 2px solid #ccc; margin-bottom: 0.5vh; padding-left: 1vh;">
+          <div class="reply-header">
+            In reply to: <span class="reply-username">${repliedMessage.name}</span> <span class="reply-timestamp">${repliedMessage.date}</span>
+          </div>
+          <div class="reply-content">${repliedMessage.content}</div>
+        </div>
+      `
+  } catch (error) {
+    throw (error)
+  }
 }
 
 const buildAttachmentHtml = async (message, room) => {
