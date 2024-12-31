@@ -448,48 +448,48 @@ const setupFileInputs = (room) => {
           addToPublishButton.disabled = selectedImages.length === 0;
         };
 
-        const container = document.createElement('div');
-        container.style = "display: flex; flex-direction: column; align-items: center; margin: 5px;";
-        container.append(img, removeButton);
-        previewContainer.append(container);
-      };
-      reader.readAsDataURL(file);
-    });
-  });
+        const container = document.createElement('div')
+        container.style = "display: flex; flex-direction: column; align-items: center; margin: 5px;"
+        container.append(img, removeButton)
+        previewContainer.append(container)
+      }
+      reader.readAsDataURL(file)
+    })
+  })
 
   addToPublishButton.addEventListener('click', () => {
-    processSelectedImages(selectedImages, multiResource, room);
-    selectedImages = [];
-    imageFileInput.value = "";
-    addToPublishButton.disabled = true;
-  });
+    processSelectedImages(selectedImages, multiResource, room)
+    selectedImages = []
+    imageFileInput.value = ""
+    addToPublishButton.disabled = true
+  })
 
   fileInput.addEventListener('change', (event) => {
-    selectedFiles = [...event.target.files];
-  });
+    selectedFiles = [...event.target.files]
+  })
 
   sendButton.addEventListener('click', async () => {
-    const quill = new Quill('#editor');
-    const messageHtml = quill.root.innerHTML.trim();
+    const quill = new Quill('#editor')
+    const messageHtml = quill.root.innerHTML.trim()
 
     if (messageHtml || selectedFiles.length > 0 || selectedImages.length > 0) {
-      await handleSendMessage(room, messageHtml, selectedFiles, selectedImages, multiResource);
+      await handleSendMessage(room, messageHtml, selectedFiles, selectedImages, multiResource)
     }
-  });
-};
+  })
+}
 
 // Process selected images
 const processSelectedImages = async (selectedImages, multiResource, room) => {
   
   for (const file of selectedImages) {
-    const attachmentID = generateAttachmentID(room, selectedImages.indexOf(file));
+    const attachmentID = generateAttachmentID(room, selectedImages.indexOf(file))
   
     multiResource.push({
       name: userState.accountName,
       service: room === "admins" ? "FILE_PRIVATE" : "FILE",
       identifier: attachmentID,
       file: file, // Use encrypted file for admins
-    });
+    })
   
     attachmentIdentifiers.push({
       name: userState.accountName,
@@ -497,37 +497,33 @@ const processSelectedImages = async (selectedImages, multiResource, room) => {
       identifier: attachmentID,
       filename: file.name,
       mimeType: file.type,
-    });
+    })
   }
-};
+}
 
 // Handle send message
 const handleSendMessage = async (room, messageHtml, selectedFiles, selectedImages, multiResource) => {
   const messageIdentifier = room === "admins"
     ? `${messageIdentifierPrefix}-${room}-e-${randomID()}`
-    : `${messageIdentifierPrefix}-${room}-${randomID()}`;
-
-  // const checkedAdminPublicKeys = room === "admins" && userState.isAdmin
-  //   ? adminPublicKeys
-  //   : await loadOrFetchAdminGroupsData().publicKeys;
+    : `${messageIdentifierPrefix}-${room}-${randomID()}`
 
   try {
     // Process selected images
     if (selectedImages.length > 0) {
-      await processSelectedImages(selectedImages, multiResource, room);
+      await processSelectedImages(selectedImages, multiResource, room)
     }
 
     // Process selected files
     if (selectedFiles && selectedFiles.length > 0) {
       for (const file of selectedFiles) {
-        const attachmentID = generateAttachmentID(room, selectedFiles.indexOf(file));
+        const attachmentID = generateAttachmentID(room, selectedFiles.indexOf(file))
 
         multiResource.push({
           name: userState.accountName,
           service: room === "admins" ? "FILE_PRIVATE" : "FILE",
           identifier: attachmentID,
           file: file, // Use encrypted file for admins
-        });
+        })
 
         attachmentIdentifiers.push({
           name: userState.accountName,
@@ -535,7 +531,7 @@ const handleSendMessage = async (room, messageHtml, selectedFiles, selectedImage
           identifier: attachmentID,
           filename: file.name,
           mimeType: file.type,
-        });
+        })
       }
     }
 
@@ -545,16 +541,16 @@ const handleSendMessage = async (room, messageHtml, selectedFiles, selectedImage
       hasAttachment: multiResource.length > 0,
       attachments: attachmentIdentifiers,
       replyTo: replyToMessageIdentifier || null, // Include replyTo if applicable
-    };
+    }
 
     // Encode the message object
-    let base64Message = await objectToBase64(messageObject);
+    let base64Message = await objectToBase64(messageObject)
     if (!base64Message) {
-      base64Message = btoa(JSON.stringify(messageObject));
+      base64Message = btoa(JSON.stringify(messageObject))
     }
 
     if (room === "admins" && userState.isAdmin) {
-      console.log("Encrypting message for admins...");
+      console.log("Encrypting message for admins...")
       
       multiResource.push({
         name: userState.accountName,
@@ -574,76 +570,71 @@ const handleSendMessage = async (room, messageHtml, selectedFiles, selectedImage
     // Publish resources
     if (room === "admins") {
       if (!userState.isAdmin) {
-        console.error("User is not an admin or no admin public keys found. Aborting publish.");
-        window.alert("You are not authorized to post in the Admin room.");
-        return;
+        console.error("User is not an admin or no admin public keys found. Aborting publish.")
+        window.alert("You are not authorized to post in the Admin room.")
+        return
       }
-      console.log("Publishing encrypted resources for Admin room...");
-      await publishMultipleResources(multiResource, adminPublicKeys, true);
+      console.log("Publishing encrypted resources for Admin room...")
+      await publishMultipleResources(multiResource, adminPublicKeys, true)
     } else {
-      console.log("Publishing resources for non-admin room...");
-      await publishMultipleResources(multiResource);
+      console.log("Publishing resources for non-admin room...")
+      await publishMultipleResources(multiResource)
     }
 
     // Clear inputs and show success notification
-    clearInputs();
-    showSuccessNotification();
+    clearInputs()
+    showSuccessNotification()
   } catch (error) {
-    console.error("Error sending message:", error);
+    console.error("Error sending message:", error)
   }
-};
+}
 
 
-
-// Modify clearInputs to reset replyTo
-const clearInputs = () => {
+function clearInputs() {
   const quill = new Quill('#editor');
-  quill.root.innerHTML = "";
+
+  // Properly reset Quill editor to ensure formatting options don't linger across messages
+  quill.setContents([]);
+  quill.setSelection(0,0);
+
+  // clear the local file input arrays
   document.getElementById('file-input').value = "";
   document.getElementById('image-input').value = "";
   document.getElementById('preview-container').innerHTML = "";
+  
   replyToMessageIdentifier = null;
   multiResource = [];
   attachmentIdentifiers = [];
-  selectedImages = []
-  selectedFiles = []
+  selectedImages = [];
+  selectedFiles = [];
 
+  // Remove the reply containers
   const replyContainer = document.querySelector(".reply-container");
   if (replyContainer) {
     replyContainer.remove();
   }
-};
+}
+
 
 // Show success notification
 const showSuccessNotification = () => {
-  const notification = document.createElement('div');
-  notification.innerText = "Message published successfully! Please wait for confirmation.";
-  notification.style.color = "green";
-  notification.style.marginTop = "1em";
+  const notification = document.createElement('div')
+  notification.innerText = "Message published successfully! Please wait for confirmation."
+  notification.style.color = "green"
+  notification.style.marginTop = "1em"
   document.querySelector(".message-input-section").appendChild(notification);
   alert(`Successfully Published! Please note that messages will not display until after they are CONFIRMED, be patient!`)
 
   setTimeout(() => {
-    notification.remove();
-  }, 10000);
-};
+    notification.remove()
+  }, 10000)
+}
 
 // Generate unique attachment ID
 const generateAttachmentID = (room, fileIndex = null) => {
-  const baseID = room === "admins" ? `${messageAttachmentIdentifierPrefix}-${room}-e-${randomID()}` : `${messageAttachmentIdentifierPrefix}-${room}-${randomID()}`;
-  return fileIndex !== null ? `${baseID}-${fileIndex}` : baseID;
-};
-
-// const decryptFile = async (encryptedData) => {
-//   const publicKey = await getPublicKeyByName(userState.accountName)
-//   const response = await qortalRequest({
-//     action: 'DECRYPT_DATA',
-//     encryptedData, // has to be in base64 format
-//     // publicKey: publicKey  // requires the public key of the opposite user with whom you've created the encrypted data.
-//   });
-//   const decryptedObject = response
-//   return decryptedObject
-// }
+  const baseID = room === "admins" ? `${messageAttachmentIdentifierPrefix}-${room}-e-${randomID()}` : `${messageAttachmentIdentifierPrefix}-${room}-${randomID()}`
+  return fileIndex !== null ? `${baseID}-${fileIndex}` : baseID
+}
 
 // --- REFACTORED LOAD MESSAGES AND HELPER FUNCTIONS ---
 
@@ -652,10 +643,10 @@ const findMessagePage = async (room, identifier, limit) => {
  //TODO check that searchSimple change worked.
   const allMessages = await searchSimple(service, query, '', 0, 0, room, 'false')
 
-  const idx = allMessages.findIndex(msg => msg.identifier === identifier);
+  const idx = allMessages.findIndex(msg => msg.identifier === identifier)
   if (idx === -1) {
     // Not found, default to last page or page=0
-    return 0;
+    return 0
   }
 
   return Math.floor(idx / limit)
@@ -664,37 +655,37 @@ const findMessagePage = async (room, identifier, limit) => {
 
 const loadMessagesFromQDN = async (room, page, isPolling = false) => {
   try {
-    const limit = 10;
-    const offset = page * limit;
-    console.log(`Loading messages from QDN: room=${room}, page=${page}, offset=${offset}, limit=${limit}`);
+    const limit = 10
+    const offset = page * limit
+    console.log(`Loading messages from QDN: room=${room}, page=${page}, offset=${offset}, limit=${limit}`)
 
-    const messagesContainer = document.querySelector("#messages-container");
-    if (!messagesContainer) return;
+    const messagesContainer = document.querySelector("#messages-container")
+    if (!messagesContainer) return
 
-    prepareMessageContainer(messagesContainer, isPolling);
+    prepareMessageContainer(messagesContainer, isPolling)
 
-    const { service, query } = getServiceAndQuery(room);
-    const response = await fetchResourceList(service, query, limit, offset, room);
+    const { service, query } = getServiceAndQuery(room)
+    const response = await fetchResourceList(service, query, limit, offset, room)
 
-    console.log(`Fetched ${response.length} message(s) for page ${page}.`);
+    console.log(`Fetched ${response.length} message(s) for page ${page}.`)
 
     if (handleNoMessagesScenario(isPolling, page, response, messagesContainer)) {
-      return;
+      return
     }
 
     // Re-establish existing identifiers after preparing container
     existingIdentifiers = new Set(
       Array.from(messagesContainer.querySelectorAll('.message-item'))
         .map(item => item.dataset.identifier)
-    );
+    )
 
-    let mostRecentMessage = getCurrentMostRecentMessage(room);
+    let mostRecentMessage = getCurrentMostRecentMessage(room)
 
-    const fetchMessages = await fetchAllMessages(response, service, room);
+    const fetchMessages = await fetchAllMessages(response, service, room)
 
     for (const msg of fetchMessages) {
-      if (!msg) continue;
-      storeMessageInMap(msg);
+      if (!msg) continue
+      storeMessageInMap(msg)
     }
 
     const { firstNewMessageIdentifier, updatedMostRecentMessage } = await renderNewMessages(
@@ -703,28 +694,28 @@ const loadMessagesFromQDN = async (room, page, isPolling = false) => {
       messagesContainer,
       room,
       mostRecentMessage
-    );
+    )
 
     if (firstNewMessageIdentifier && !isPolling) {
-      scrollToNewMessages(firstNewMessageIdentifier);
+      scrollToNewMessages(firstNewMessageIdentifier)
     }
 
     if (updatedMostRecentMessage) {
-      updateLatestMessageIdentifiers(room, updatedMostRecentMessage);
+      updateLatestMessageIdentifiers(room, updatedMostRecentMessage)
     }
 
-    handleReplyLogic(fetchMessages);
+    handleReplyLogic(fetchMessages)
 
-    await updatePaginationControls(room, limit);
+    await updatePaginationControls(room, limit)
   } catch (error) {
-    console.error('Error loading messages from QDN:', error);
+    console.error('Error loading messages from QDN:', error)
   }
-};
+}
 
 function scrollToMessage(identifier) {
-  const targetElement = document.querySelector(`.message-item[data-identifier="${identifier}"]`);
+  const targetElement = document.querySelector(`.message-item[data-identifier="${identifier}"]`)
   if (targetElement) {
-    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 }
 
@@ -732,37 +723,37 @@ function scrollToMessage(identifier) {
 
 const prepareMessageContainer = (messagesContainer, isPolling) => {
   if (!isPolling) {
-    messagesContainer.innerHTML = "";
-    existingIdentifiers.clear();
+    messagesContainer.innerHTML = ""
+    existingIdentifiers.clear()
   }
-};
+}
 
 const getServiceAndQuery = (room) => {
-  const service = (room === "admins") ? "MAIL_PRIVATE" : "BLOG_POST";
+  const service = (room === "admins") ? "MAIL_PRIVATE" : "BLOG_POST"
   const query = (room === "admins") 
     ? `${messageIdentifierPrefix}-${room}-e` 
-    : `${messageIdentifierPrefix}-${room}`;
-  return { service, query };
-};
+    : `${messageIdentifierPrefix}-${room}`
+  return { service, query }
+}
 
 const fetchResourceList = async (service, query, limit, offset, room) => {
   //TODO check
-  return await searchSimple(service, query, '', limit, offset, room, 'false');
-};
+  return await searchSimple(service, query, '', limit, offset, room, 'false')
+}
 
 const handleNoMessagesScenario = (isPolling, page, response, messagesContainer) => {
   if (response.length === 0) {
     if (page === 0 && !isPolling) {
-      messagesContainer.innerHTML = `<p>No messages found. Be the first to post!</p>`;
+      messagesContainer.innerHTML = `<p>No messages found. Be the first to post!</p>`
     }
-    return true;
+    return true
   }
-  return false;
-};
+  return false
+}
 
 const getCurrentMostRecentMessage = (room) => {
-  return latestMessageIdentifiers[room]?.latestTimestamp ? latestMessageIdentifiers[room] : null;
-};
+  return latestMessageIdentifiers[room]?.latestTimestamp ? latestMessageIdentifiers[room] : null
+}
 
 // 1) Convert fetchAllMessages to fully async
 const fetchAllMessages = async (response, service, room) => {
@@ -771,19 +762,19 @@ const fetchAllMessages = async (response, service, room) => {
   const messages = await Promise.all(
     response.map(async (resource) => {
       try {
-        const msg = await fetchFullMessage(resource, service, room);
+        const msg = await fetchFullMessage(resource, service, room)
         return msg; // This might be null if you do that check in fetchFullMessage
       } catch (err) {
-        console.error(`Skipping resource ${resource.identifier} due to error:`, err);
+        console.error(`Skipping resource ${resource.identifier} due to error:`, err)
         // Return null so it doesn't break everything
-        return null;
+        return null
       }
     })
-  );
+  )
 
   // Filter out any that are null/undefined (missing or errored)
-  return messages.filter(Boolean);
-};
+  return messages.filter(Boolean)
+}
 
 
 // 2) fetchFullMessage is already async. We keep it async/await-based
@@ -792,27 +783,27 @@ const fetchFullMessage = async (resource, service, room) => {
   if (messagesById[resource.identifier]) {
     // Possibly also check if the local data is "up to date," //TODO when adding 'edit' ability to messages, will also need to verify timestamp in saved data.
     // but if you trust your local data, skip the fetch entirely.
-    console.log(`Skipping fetch. Found in local store: ${resource.identifier}`);
-    return messagesById[resource.identifier];
+    console.log(`Skipping fetch. Found in local store: ${resource.identifier}`)
+    return messagesById[resource.identifier]
   }
   try {
     // Skip if already displayed
     if (existingIdentifiers.has(resource.identifier)) {
-      return null;
+      return null
     }
 
-    console.log(`Fetching message with identifier: ${resource.identifier}`);
+    console.log(`Fetching message with identifier: ${resource.identifier}`)
     const messageResponse = await qortalRequest({
       action: "FETCH_QDN_RESOURCE",
       name: resource.name,
       service,
       identifier: resource.identifier,
       ...(room === "admins" ? { encoding: "base64" } : {}),
-    });
+    })
 
-    const timestamp = resource.updated || resource.created;
-    const formattedTimestamp = await timestampToHumanReadableDate(timestamp);
-    const messageObject = await processMessageObject(messageResponse, room);
+    const timestamp = resource.updated || resource.created
+    const formattedTimestamp = await timestampToHumanReadableDate(timestamp)
+    const messageObject = await processMessageObject(messageResponse, room)
 
     const builtMsg = {
       name: resource.name,
@@ -822,14 +813,14 @@ const fetchFullMessage = async (resource, service, room) => {
       replyTo: messageObject?.replyTo || null,
       timestamp,
       attachments: messageObject?.attachments || [],
-    };
+    }
 
     // 3) Store it in the map so we skip future fetches
-    storeMessageInMap(builtMsg);
+    storeMessageInMap(builtMsg)
 
-    return builtMsg;
+    return builtMsg
   } catch (error) {
-    console.error(`Failed to fetch message ${resource.identifier}: ${error.message}`);
+    console.error(`Failed to fetch message ${resource.identifier}: ${error.message}`)
     return {
       name: resource.name,
       content: "<em>Error loading message</em>",
@@ -838,14 +829,14 @@ const fetchFullMessage = async (resource, service, room) => {
       replyTo: null,
       timestamp: resource.updated || resource.created,
       attachments: [],
-    };
+    }
   }
-};
+}
 
 const fetchReplyData = async (service, name, identifier, room, replyTimestamp) => {
   try {
 
-    console.log(`Fetching message with identifier: ${identifier}`);
+    console.log(`Fetching message with identifier: ${identifier}`)
     const messageResponse = await qortalRequest({
       action: "FETCH_QDN_RESOURCE",
       name,
@@ -867,7 +858,7 @@ const fetchReplyData = async (service, name, identifier, room, replyTimestamp) =
       replyTo: messageObject?.replyTo || null,
       timestamp: replyTimestamp,
       attachments: messageObject?.attachments || [],
-    };
+    }
   } catch (error) {
     console.error(`Failed to fetch message ${identifier}: ${error.message}`)
     return {
@@ -898,41 +889,41 @@ const processMessageObject = async (messageResponse, room) => {
 };
 
 const renderNewMessages = async (fetchMessages, existingIdentifiers, messagesContainer, room, mostRecentMessage) => {
-  let firstNewMessageIdentifier = null;
-  let updatedMostRecentMessage = mostRecentMessage;
+  let firstNewMessageIdentifier = null
+  let updatedMostRecentMessage = mostRecentMessage
 
   for (const message of fetchMessages) {
     if (message && !existingIdentifiers.has(message.identifier)) {
-      const isNewMessage = isMessageNew(message, mostRecentMessage);
+      const isNewMessage = isMessageNew(message, mostRecentMessage)
       if (isNewMessage && !firstNewMessageIdentifier) {
-        firstNewMessageIdentifier = message.identifier;
+        firstNewMessageIdentifier = message.identifier
       }
 
-      const messageHTML = await buildMessageHTML(message, fetchMessages, room, isNewMessage);
-      messagesContainer.insertAdjacentHTML('beforeend', messageHTML);
+      const messageHTML = await buildMessageHTML(message, fetchMessages, room, isNewMessage)
+      messagesContainer.insertAdjacentHTML('beforeend', messageHTML)
 
       if (!updatedMostRecentMessage || new Date(message.timestamp) > new Date(updatedMostRecentMessage?.latestTimestamp || 0)) {
         updatedMostRecentMessage = {
           latestIdentifier: message.identifier,
           latestTimestamp: message.timestamp,
-        };
+        }
       }
 
-      existingIdentifiers.add(message.identifier);
+      existingIdentifiers.add(message.identifier)
     }
   }
 
-  return { firstNewMessageIdentifier, updatedMostRecentMessage };
-};
+  return { firstNewMessageIdentifier, updatedMostRecentMessage }
+}
 
 const isMessageNew = (message, mostRecentMessage) => {
-  return !mostRecentMessage || new Date(message.timestamp) > new Date(mostRecentMessage?.latestTimestamp);
-};
+  return !mostRecentMessage || new Date(message.timestamp) > new Date(mostRecentMessage?.latestTimestamp)
+}
 
 const buildMessageHTML = async (message, fetchMessages, room, isNewMessage) => {
-  const replyHtml = await buildReplyHtml(message, room);
-  const attachmentHtml = await buildAttachmentHtml(message, room);  
-  const avatarUrl = `/arbitrary/THUMBNAIL/${message.name}/qortal_avatar`;
+  const replyHtml = await buildReplyHtml(message, room)
+  const attachmentHtml = await buildAttachmentHtml(message, room)
+  const avatarUrl = `/arbitrary/THUMBNAIL/${message.name}/qortal_avatar`
 
   return `
     <div class="message-item" data-identifier="${message.identifier}">
@@ -956,21 +947,21 @@ const buildMessageHTML = async (message, fetchMessages, room, isNewMessage) => {
 
 const buildReplyHtml = async (message, room) => {
   // 1) If no replyTo, skip
-  if (!message.replyTo) return "";
+  if (!message.replyTo) return ""
 
   // 2) Decide which QDN service for this room
-  const replyService = (room === "admins") ? "MAIL_PRIVATE" : "BLOG_POST";
-  const replyIdentifier = message.replyTo;
+  const replyService = (room === "admins") ? "MAIL_PRIVATE" : "BLOG_POST"
+  const replyIdentifier = message.replyTo
 
   // 3) Check if we already have a *saved* message
-  const savedRepliedToMessage = messagesById[replyIdentifier];
-  console.log("savedRepliedToMessage", savedRepliedToMessage);
+  const savedRepliedToMessage = messagesById[replyIdentifier]
+  console.log("savedRepliedToMessage", savedRepliedToMessage)
 
   // 4) If we do, try to process/decrypt it
   if (savedRepliedToMessage) {
     if (savedRepliedToMessage) {
       // We successfully processed the cached message
-      console.log("Using saved message data for reply:", savedRepliedToMessage);
+      console.log("Using saved message data for reply:", savedRepliedToMessage)
       return `
         <div class="reply-message" style="border-left: 2px solid #ccc; margin-bottom: 0.5vh; padding-left: 1vh;">
           <div class="reply-header">
@@ -979,32 +970,32 @@ const buildReplyHtml = async (message, room) => {
           </div>
           <div class="reply-content">${savedRepliedToMessage.content}</div>
         </div>
-      `;
+      `
     } else {
       // The cached message is invalid 
-      console.log("Saved message found but processMessageObject returned null. Falling back...");
+      console.log("Saved message found but processMessageObject returned null. Falling back...")
     }
   }
 
   // 5) Fallback approach: If we don't have it in memory OR the cached version was invalid
   try {
-    const replyData = await searchSimple(replyService, replyIdentifier, "", 1);
+    const replyData = await searchSimple(replyService, replyIdentifier, "", 1)
     if (!replyData || !replyData.name) {
-      console.log("No data found via searchSimple. Skipping reply rendering.");
-      return "";
+      console.log("No data found via searchSimple. Skipping reply rendering.")
+      return ""
     }
 
     // We'll use replyData to fetch the actual message from QDN
-    const replyName = replyData.name;
-    const replyTimestamp = replyData.updated || replyData.created;
-    console.log("message not found in workable form, using searchSimple result =>", replyData);
+    const replyName = replyData.name
+    const replyTimestamp = replyData.updated || replyData.created
+    console.log("message not found in workable form, using searchSimple result =>", replyData)
 
     // This fetches and decrypts the actual message
-    const repliedMessage = await fetchReplyData(replyService, replyName, replyIdentifier, room, replyTimestamp);
-    if (!repliedMessage) return "";
+    const repliedMessage = await fetchReplyData(replyService, replyName, replyIdentifier, room, replyTimestamp)
+    if (!repliedMessage) return ""
 
     // Now store the final message in the map for next time
-    storeMessageInMap(repliedMessage);
+    storeMessageInMap(repliedMessage)
 
     // Return final HTML
     return `
@@ -1014,28 +1005,28 @@ const buildReplyHtml = async (message, room) => {
         </div>
         <div class="reply-content">${repliedMessage.content}</div>
       </div>
-    `;
+    `
   } catch (error) {
-    throw error;
+    throw error
   }
-};
+}
 
 const buildAttachmentHtml = async (message, room) => {
   if (!message.attachments || message.attachments.length === 0) {
-    return "";
+    return ""
   }
 
   // Map over attachments -> array of Promises
   const attachmentsHtmlPromises = message.attachments.map(attachment =>
     buildSingleAttachmentHtml(attachment, room)
-  );
+  )
 
   // Wait for all Promises to resolve -> array of HTML strings
-  const attachmentsHtmlArray = await Promise.all(attachmentsHtmlPromises);
+  const attachmentsHtmlArray = await Promise.all(attachmentsHtmlPromises)
 
   // Join them into a single string
-  return attachmentsHtmlArray.join("");
-};
+  return attachmentsHtmlArray.join("")
+}
 
 const buildSingleAttachmentHtml = async (attachment, room) => {
   if (room !== "admins" && attachment.mimeType && attachment.mimeType.startsWith('image/')) {
@@ -1052,7 +1043,7 @@ const buildSingleAttachmentHtml = async (attachment, room) => {
     (room === "admins" && attachment.mimeType && attachment.mimeType.startsWith('image/')) {
     // const imageUrl = `/arbitrary/${attachment.service}/${attachment.name}/${attachment.identifier}`;
     const decryptedBase64 = await fetchEncryptedImageBase64(attachment.service, attachment.name, attachment.identifier, attachment.mimeType)
-    const dataUrl = `data:image/png;base64,${decryptedBase64}`
+    const dataUrl = `data:image/${attachment.mimeType};base64,${decryptedBase64}`
     return `
       <div class="attachment">
         <img src="${dataUrl}" alt="${attachment.filename}" class="inline-image"/>
@@ -1060,7 +1051,7 @@ const buildSingleAttachmentHtml = async (attachment, room) => {
           Save ${attachment.filename}
         </button>
       </div>
-    `;
+    `
 
   } else {
     return `

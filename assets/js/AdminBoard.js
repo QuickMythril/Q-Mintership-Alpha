@@ -11,7 +11,7 @@ let attemptLoadAdminDataCount = 0
 let adminMemberCount = 0
 let adminPublicKeys = []
 
-console.log("Attempting to load AdminBoard.js");
+console.log("Attempting to load AdminBoard.js")
 
 const loadAdminBoardPage = async () => {
   // Clear existing content on the page
@@ -24,7 +24,7 @@ const loadAdminBoardPage = async () => {
   }
 
   // Add the "Minter Board" content
-  const mainContent = document.createElement("div");
+  const mainContent = document.createElement("div")
   mainContent.innerHTML = `
     <div class="minter-board-main" style="padding: 20px; text-align: center;">
     <h1 style="color: lightblue;">AdminBoard</h1>
@@ -56,8 +56,8 @@ const loadAdminBoardPage = async () => {
         </form>
     </div>
     </div>
-  `;
-  document.body.appendChild(mainContent);
+  `
+  document.body.appendChild(mainContent)
   const publishCardButton = document.getElementById("publish-card-button")
   if (publishCardButton) {
     publishCardButton.addEventListener("click", async () => {
@@ -97,16 +97,16 @@ const loadAdminBoardPage = async () => {
   }
 
   document.getElementById("publish-card-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const isTopicChecked = document.getElementById("topic-checkbox").checked;
+    event.preventDefault()
+    const isTopicChecked = document.getElementById("topic-checkbox").checked
   
     // Pass that boolean to publishEncryptedCard
-    await publishEncryptedCard(isTopicChecked);
-  });
+    await publishEncryptedCard(isTopicChecked)
+  })
 
-  // await fetchAndValidateAllAdminCards();
-  await fetchAllEncryptedCards();
-  await updateOrSaveAdminGroupsDataLocally();
+  // await fetchAndValidateAllAdminCards()
+  await fetchAllEncryptedCards()
+  await updateOrSaveAdminGroupsDataLocally()
 }
 
 // Example: fetch and save admin public keys and count
@@ -131,7 +131,7 @@ const updateOrSaveAdminGroupsDataLocally = async () => {
     console.error('Error fetching/storing admin public keys:', error)
     attemptLoadAdminDataCount++
   }
-};
+}
 
 const loadOrFetchAdminGroupsData = async () => {
   try {
@@ -163,11 +163,6 @@ const loadOrFetchAdminGroupsData = async () => {
 }
 
 const extractEncryptedCardsMinterName = (cardIdentifier) => {
-  // Ensure the identifier starts with the prefix
-  // if (!cardIdentifier.startsWith(`${encryptedCardIdentifierPrefix}-`)) {
-  //   throw new Error('Invalid identifier format or prefix mismatch');
-  // }
-  // Split the identifier into parts
   const parts = cardIdentifier.split('-');
   // Ensure the format has at least 3 parts
   if (parts.length < 3) {
@@ -179,9 +174,9 @@ const extractEncryptedCardsMinterName = (cardIdentifier) => {
     return
   }
   // Extract minterName (everything from the second part to the second-to-last part)
-  const minterName = parts.slice(2, -1).join('-');
+  const minterName = parts.slice(2, -1).join('-')
   // Return the extracted minterName
-  return minterName;
+  return minterName
 }
 
 const processCards = async (validEncryptedCards) => {
@@ -206,24 +201,17 @@ const processCards = async (validEncryptedCards) => {
 }
 
 
-
 //Main function to load the Minter Cards ----------------------------------------
 const fetchAllEncryptedCards = async () => {
-  const encryptedCardsContainer = document.getElementById("encrypted-cards-container");
-  encryptedCardsContainer.innerHTML = "<p>Loading cards...</p>";
+  const encryptedCardsContainer = document.getElementById("encrypted-cards-container")
+  encryptedCardsContainer.innerHTML = "<p>Loading cards...</p>"
 
   try {
-    // const response = await qortalRequest({
-    //   action: "SEARCH_QDN_RESOURCES",
-    //   service: "MAIL_PRIVATE",
-    //   query: encryptedCardIdentifierPrefix,
-    //   mode: "ALL"
-    // })
     const response = await searchSimple('MAIL_PRIVATE', `${encryptedCardIdentifierPrefix}`, '', 0)
 
     if (!response || !Array.isArray(response) || response.length === 0) {
-      encryptedCardsContainer.innerHTML = "<p>No cards found.</p>";
-      return;
+      encryptedCardsContainer.innerHTML = "<p>No cards found.</p>"
+      return
     }
 
     // Validate cards and filter
@@ -235,7 +223,7 @@ const fetchAllEncryptedCards = async () => {
     )
     console.log(`validatedEncryptedCards:`, validatedEncryptedCards, `... running next filter...`)
 
-    const validEncryptedCards = validatedEncryptedCards.filter(card => card !== null);
+    const validEncryptedCards = validatedEncryptedCards.filter(card => card !== null)
     console.log(`validEncryptedcards:`, validEncryptedCards)
     
     if (validEncryptedCards.length === 0) {
@@ -246,80 +234,89 @@ const fetchAllEncryptedCards = async () => {
     
     console.log(`finalCards:`,finalCards)
     // Display skeleton cards immediately
-    encryptedCardsContainer.innerHTML = "";
+    encryptedCardsContainer.innerHTML = ""
     finalCards.forEach(card => {
-      const skeletonHTML = createSkeletonCardHTML(card.identifier);
-      encryptedCardsContainer.insertAdjacentHTML("beforeend", skeletonHTML);
-    });
+      const skeletonHTML = createSkeletonCardHTML(card.identifier)
+      encryptedCardsContainer.insertAdjacentHTML("beforeend", skeletonHTML)
+    })
 
     // Fetch and update each card
     finalCards.forEach(async card => {
       try {
         const hasMinterName = await extractEncryptedCardsMinterName(card.identifier)
         if (hasMinterName) existingCardMinterNames.push(hasMinterName)
+
         const cardDataResponse = await qortalRequest({
           action: "FETCH_QDN_RESOURCE",
           name: card.name,
           service: "MAIL_PRIVATE",
           identifier: card.identifier,
           encoding: "base64"
-        });
+        })
 
         if (!cardDataResponse) {
-          console.warn(`Skipping invalid card: ${JSON.stringify(card)}`);
-          removeSkeleton(card.identifier);
-          return;
+          console.warn(`Skipping invalid card: ${JSON.stringify(card)}`)
+          removeSkeleton(card.identifier)
+          return
         }
 
-        const decryptedCardData = await decryptAndParseObject(cardDataResponse);
+        const decryptedCardData = await decryptAndParseObject(cardDataResponse)
 
         // Skip cards without polls
         if (!decryptedCardData.poll) {
-          console.warn(`Skipping card with no poll: ${card.identifier}`);
-          removeSkeleton(card.identifier);
-          return;
+          console.warn(`Skipping card with no poll: ${card.identifier}`)
+          removeSkeleton(card.identifier)
+          return
+        }
+
+        const encryptedCardPollPublisherPublicKey = await getPollPublisherPublicKey(decryptedCardData.poll)
+        const encryptedCardPublisherPublicKey = await getPublicKeyByName(card.name)
+
+        if (encryptedCardPollPublisherPublicKey != encryptedCardPublisherPublicKey) {
+          console.warn(`QuickMythril cardPollHijack attack found! Not including card with identifier: ${card.identifier}`)
+          return
         }
 
         // Fetch poll results
-        const pollResults = await fetchPollResults(decryptedCardData.poll);
+        const pollResults = await fetchPollResults(decryptedCardData.poll)
 
         if (pollResults?.error) {
-          console.warn(`Skipping card with non-existent poll: ${card.identifier}, poll=${decryptedCardData.poll}`);
-          removeEncryptedSkeleton(card.identifier);
-          return;
+          console.warn(`Skipping card with non-existent poll: ${card.identifier}, poll=${decryptedCardData.poll}`)
+          removeSkeleton(card.identifier)
+          return
         }
         // const minterNameFromIdentifier = await extractCardsMinterName(card.identifier);
-        const encryptedCommentCount = await getEncryptedCommentCount(card.identifier);
+        const encryptedCommentCount = await getEncryptedCommentCount(card.identifier)
         // Generate final card HTML
         
-        const finalCardHTML = await createEncryptedCardHTML(decryptedCardData, pollResults, card.identifier, encryptedCommentCount);
-        replaceEncryptedSkeleton(card.identifier, finalCardHTML);
+        const finalCardHTML = await createEncryptedCardHTML(decryptedCardData, pollResults, card.identifier, encryptedCommentCount)
+        replaceEncryptedSkeleton(card.identifier, finalCardHTML)
       } catch (error) {
-        console.error(`Error processing card ${card.identifier}:`, error);
-        removeEncryptedSkeleton(card.identifier); // Silently remove skeleton on error
+        console.error(`Error processing card ${card.identifier}:`, error)
+        removeSkeleton(card.identifier)
       }
-    });
+    })
 
   } catch (error) {
-    console.error("Error loading cards:", error);
-    encryptedCardsContainer.innerHTML = "<p>Failed to load cards.</p>";
+    console.error("Error loading cards:", error)
+    encryptedCardsContainer.innerHTML = "<p>Failed to load cards.</p>"
   }
-};
+}
 
 
 const removeEncryptedSkeleton = (cardIdentifier) => {
-  const encryptedSkeletonCard = document.getElementById(`skeleton-${cardIdentifier}`);
+  const encryptedSkeletonCard = document.getElementById(`skeleton-${cardIdentifier}`)
   if (encryptedSkeletonCard) {
     encryptedSkeletonCard.remove(); // Remove the skeleton silently
   }
-};
+}
 
 const replaceEncryptedSkeleton = (cardIdentifier, htmlContent) => {
-  const encryptedSkeletonCard = document.getElementById(`skeleton-${cardIdentifier}`);
+  const encryptedSkeletonCard = document.getElementById(`skeleton-${cardIdentifier}`)
   if (encryptedSkeletonCard) {
     encryptedSkeletonCard.outerHTML = htmlContent;
   }
-};
+}
 
 // Function to create a skeleton card
 const createEncryptedSkeletonCardHTML = (cardIdentifier) => {
@@ -336,46 +333,37 @@ const createEncryptedSkeletonCardHTML = (cardIdentifier) => {
         <div style="width: 100%; height: 40px; background-color: #eee;"></div>
       </div>
     </div>
-  `;
-};
+  `
+}
 
 
 // Function to check and fech an existing Minter Card if attempting to publish twice ----------------------------------------
 const fetchExistingEncryptedCard = async (minterName) => {
   try {
-    // const response = await qortalRequest({
-    //   action: "SEARCH_QDN_RESOURCES",
-    //   service: "MAIL_PRIVATE",
-    //   identifier: encryptedCardIdentifierPrefix,
-    //   query: minterName,
-    //   mode: "ALL", 
-    // })
-
-    //CHANGED to searchSimple to speed up search results.
     const response = await searchSimple('MAIL_PRIVATE', `${encryptedCardIdentifierPrefix}`, minterName, 0)
 
-    console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`);
+    console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`)
 
     // Step 2: Check if the response is an array and not empty
     if (!response || !Array.isArray(response) || response.length === 0) {
-      console.log("No cards found for the current user.");
-      return null;
+      console.log("No cards found for the current user.")
+      return null
     }
 
     // Step 3: Validate cards asynchronously
     const validatedCards = await Promise.all(
       response.map(async card => {
         const isValid = await validateEncryptedCardIdentifier(card)
-        return isValid ? card : null;
+        return isValid ? card : null
       })
-    );
+    )
 
     // Step 4: Filter out invalid cards
-    const validCards = validatedCards.filter(card => card !== null);
+    const validCards = validatedCards.filter(card => card !== null)
 
     if (validCards.length > 0) {
       // Step 5: Sort by most recent timestamp
-      const mostRecentCard = validCards.sort((a, b) => b.created - a.created)[0];
+      const mostRecentCard = validCards.sort((a, b) => b.created - a.created)[0]
 
       // Step 6: Fetch full card data
       const cardDataResponse = await qortalRequest({
@@ -384,23 +372,23 @@ const fetchExistingEncryptedCard = async (minterName) => {
         service: mostRecentCard.service,
         identifier: mostRecentCard.identifier,
         encoding: "base64"
-      });
+      })
 
-      existingEncryptedCardIdentifier = mostRecentCard.identifier;
+      existingEncryptedCardIdentifier = mostRecentCard.identifier
 
       existingDecryptedCardData = await decryptAndParseObject(cardDataResponse)
-      console.log("Full card data fetched successfully:", existingDecryptedCardData);
+      console.log("Full card data fetched successfully:", existingDecryptedCardData)
 
-      return existingDecryptedCardData;
+      return existingDecryptedCardData
     }
 
-    console.log("No valid cards found.");
-    return null;
+    console.log("No valid cards found.")
+    return null
   } catch (error) {
     console.error("Error fetching existing card:", error);
-    return null;
+    return null
   }
-};
+}
 
 // Validate that a card is indeed a card and not a comment. -------------------------------------
 const validateEncryptedCardIdentifier = async (card) => {
@@ -410,7 +398,7 @@ const validateEncryptedCardIdentifier = async (card) => {
     card.service === "MAIL_PRIVATE" &&
     card.identifier && !card.identifier.includes("comment") &&
     card.created
-  );
+  )
 }
 
 // Load existing card data passed, into the form for editing -------------------------------------
@@ -421,15 +409,15 @@ const loadEncryptedCardIntoForm = async () => {
     document.getElementById("card-header").value = existingDecryptedCardData.header
     document.getElementById("card-content").value = existingDecryptedCardData.content
 
-    const linksContainer = document.getElementById("links-container");
+    const linksContainer = document.getElementById("links-container")
     linksContainer.innerHTML = ""; // Clear previous links
     existingDecryptedCardData.links.forEach(link => {
-      const linkInput = document.createElement("input");
-      linkInput.type = "text";
-      linkInput.className = "card-link";
-      linkInput.value = link;
-      linksContainer.appendChild(linkInput);
-    });
+      const linkInput = document.createElement("input")
+      linkInput.type = "text"
+      linkInput.className = "card-link"
+      linkInput.value = link
+      linksContainer.appendChild(linkInput)
+    })
   }
 }
 
@@ -447,20 +435,20 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
   // If the user wants it to be a topic, we set global isTopic = true, else false
   isTopic = isTopicModePassed || isTopic
 
-  const minterNameInput = document.getElementById("minter-name-input").value.trim();
-  const header = document.getElementById("card-header").value.trim();
-  const content = document.getElementById("card-content").value.trim();
+  const minterNameInput = document.getElementById("minter-name-input").value.trim()
+  const header = document.getElementById("card-header").value.trim()
+  const content = document.getElementById("card-content").value.trim()
   const links = Array.from(document.querySelectorAll(".card-link"))
     .map(input => input.value.trim())
-    .filter(link => link.startsWith("qortal://"));
+    .filter(link => link.startsWith("qortal://"))
 
   // Basic validation
   if (!header || !content) {
-    alert("Header and Content are required!");
-    return;
+    alert("Header and Content are required!")
+    return
   }
 
-  let publishedMinterName = minterNameInput;
+  let publishedMinterName = minterNameInput
 
   // If not topic mode, validate the user actually entered a valid Minter name
   if (!isTopic) {
@@ -507,9 +495,9 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
 
   try {
     // Convert to base64 or fallback
-    let base64CardData = await objectToBase64(cardData);
+    let base64CardData = await objectToBase64(cardData)
     if (!base64CardData) {
-      base64CardData = btoa(JSON.stringify(cardData));
+      base64CardData = btoa(JSON.stringify(cardData))
     }
 
     let verifiedAdminPublicKeys = adminPublicKeys
@@ -560,15 +548,15 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
       alert("Card updated successfully! (No poll updates possible currently...)");
     }
 
-    document.getElementById("publish-card-form").reset();
-    document.getElementById("publish-card-view").style.display = "none";
-    document.getElementById("encrypted-cards-container").style.display = "flex";
+    document.getElementById("publish-card-form").reset()
+    document.getElementById("publish-card-view").style.display = "none"
+    document.getElementById("encrypted-cards-container").style.display = "flex"
     isTopic = false; // reset global
   } catch (error) {
-    console.error("Error publishing card or poll:", error);
-    alert("Failed to publish card and poll.");
+    console.error("Error publishing card or poll:", error)
+    alert("Failed to publish card and poll.")
   }
-};
+}
 
 
 const getEncryptedCommentCount = async (cardIdentifier) => {
@@ -633,7 +621,7 @@ const postEncryptedComment = async (cardIdentifier) => {
 //Fetch the comments for a card with passed card identifier ----------------------------
 const fetchEncryptedComments = async (cardIdentifier) => {
   try {
-    const response = await searchSimple('MAIL_PRIVATE', `comment-${cardIdentifier}`, '', 0)
+    const response = await searchSimple('MAIL_PRIVATE', `comment-${cardIdentifier}`, '', 0, 0, '', false)
     if (response) {
       return response;
     }

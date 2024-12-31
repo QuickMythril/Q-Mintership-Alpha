@@ -8,7 +8,7 @@ let isOutsideOfUiDevelopment = false
 if (typeof qortalRequest === 'function') {
     console.log('qortalRequest is available as a function. Setting development mode to false and baseUrl to nothing.')
     isOutsideOfUiDevelopment = false
-    baseUrl = ''
+    baseUrl = '' 
 } else {
     console.log('qortalRequest is not available as a function. Setting baseUrl to localhost.')
     isOutsideOfUiDevelopment = true
@@ -154,7 +154,6 @@ const getAddressInfo = async (address) => {
             method: 'GET',
         })
         const addressData = await response.json()
-        console.log(`address data:`,addressData)
 
         return {
             address: addressData.address,
@@ -256,6 +255,12 @@ const getNameInfo = async (name) => {
     console.log('name:', name)
     try {
         const response = await fetch(`${baseUrl}/names/${name}`)
+
+        if (!response.ok) {
+            console.warn(`Failed to fetch name info for: ${name}, status: ${response.status}`)
+            return null
+          }
+
         const data = await response.json()
         console.log('Fetched name info:', data)
         return {
@@ -665,9 +670,11 @@ const searchSimple = async (service, identifier, name, limit = 1500, offset = 0,
       if (name && !identifier && !room) {
         console.log('name only searchSimple', name)
         urlSuffix = `service=${service}&name=${name}&limit=${limit}&prefix=true&reverse=${reverse}`
+
       } else if (!name && identifier && !room) {
         console.log('identifier only searchSimple', identifier)
         urlSuffix = `service=${service}&identifier=${identifier}&limit=${limit}&prefix=true&reverse=${reverse}`
+
       } else if (!name && !identifier && !room) {
         console.error(`name: ${name} AND identifier: ${identifier} not passed. Must include at least one...`)
         return null 
@@ -675,6 +682,7 @@ const searchSimple = async (service, identifier, name, limit = 1500, offset = 0,
       } else {
         console.log(`final searchSimple params = service: '${service}', identifier: '${identifier}', name: '${name}', limit: '${limit}', offset: '${offset}', room: '${room}', reverse: '${reverse}'`)
       }
+
       const response = await fetch(`${baseUrl}/arbitrary/resources/searchsimple?${urlSuffix}`, {
         method: 'GET',
         headers: { 'accept': 'application/json' }
@@ -703,10 +711,8 @@ const searchSimple = async (service, identifier, name, limit = 1500, offset = 0,
       console.error("error during searchSimple", error)
       throw error
     }
-  }
+}
   
-
-
 const searchAllCountOnly = async (query, room) => {
     try {
         let offset = 0
@@ -719,7 +725,6 @@ const searchAllCountOnly = async (query, room) => {
 
             try {
                 console.log(`'mintership-forum-message' not found, switching to actual query...`)
-
                 if (room === "admins") {
                     while (hasMore) {
                         const response = await qortalRequest({
@@ -764,7 +769,6 @@ const searchAllCountOnly = async (query, room) => {
                         }
                     }
                 }
-            
                 return totalCount
 
             } catch (error) {
@@ -788,7 +792,6 @@ const searchAllCountOnly = async (query, room) => {
             }
 
         }else {
-        
             while (hasMore) {
                 const response = await searchSimple('BLOG_POST', query, '', limit, offset, room, false)
 
@@ -1095,6 +1098,34 @@ const getProductDetails = async (service, name, identifier) => {
 
 // Qortal poll-related calls ----------------------------------------------------------------------
 
+const getPollOwnerAddress = async (pollName) => {
+    try {
+        const response = await fetch(`${baseUrl}/polls/${pollName}`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        })
+        const pollData = await response.json()
+        return pollData.owner
+      } catch (error) {
+        console.error(`Error fetching poll results for ${pollName}:`, error)
+        return null
+      }
+}
+
+const getPollPublisherPublicKey = async (pollName) => {
+    try {
+        const response = await fetch(`${baseUrl}/polls/${pollName}`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        })
+        const pollData = await response.json()
+        return pollData.creatorPublicKey
+      } catch (error) {
+        console.error(`Error fetching poll results for ${pollName}:`, error)
+        return null
+      }
+}
+
 const fetchPollResults = async (pollName) => {
     try {
       const response = await fetch(`${baseUrl}/polls/votes/${pollName}`, {
@@ -1107,7 +1138,7 @@ const fetchPollResults = async (pollName) => {
       console.error(`Error fetching poll results for ${pollName}:`, error)
       return null
     }
-  }
+}
 
   // Vote YES on a poll ------------------------------
 const voteYesOnPoll = async (poll) => {
@@ -1116,7 +1147,7 @@ const voteYesOnPoll = async (poll) => {
       pollName: poll,
       optionIndex: 0,
     })
-  }
+}
   
   // Vote NO on a poll -----------------------------
   const voteNoOnPoll = async (poll) => {
@@ -1125,7 +1156,7 @@ const voteYesOnPoll = async (poll) => {
       pollName: poll,
       optionIndex: 1,
     })
-  }
+}
 
 // export {
 //     userState,

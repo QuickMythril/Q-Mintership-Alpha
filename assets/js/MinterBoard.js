@@ -140,7 +140,6 @@ const extractMinterCardsMinterName = async (cardIdentifier) => {
 const processMinterCards = async (validMinterCards) => {
   const latestCardsMap = new Map()
 
-  // Step 1: Filter and keep the most recent card per identifier
   validMinterCards.forEach(card => {
     const timestamp = card.updated || card.created || 0
     const existingCard = latestCardsMap.get(card.identifier)
@@ -150,36 +149,47 @@ const processMinterCards = async (validMinterCards) => {
     }
   })
 
-  // Step 2: Extract unique cards
-  const uniqueValidCards = Array.from(latestCardsMap.values())
-
-  // Step 3: Group by minterName and select the most recent card per minterName
+  const minterGroupMembers = await fetchMinterGroupMembers()
+  const minterGroupAddresses = minterGroupMembers.map(m => m.member)
   const minterNameMap = new Map()
 
   for (const card of validMinterCards) {
     const minterName = await extractMinterCardsMinterName(card.identifier)
+    console.log(`minterName`, minterName)
+    const minterNameInfo = await getNameInfo(minterName)
+    if (!minterNameInfo) {
+      console.warn(`minterNameInfo is null for minter: ${minterName}`)
+      continue
+    }
+    const minterAddress = await minterNameInfo.owner
+
+    if (!minterAddress) {
+      console.warn(`minterAddress is FAKE or INVALID in some way! minter: ${minterName}`)
+      continue
+    } else if (minterGroupAddresses.includes(minterAddress)){
+      console.log(`existing minter FOUND and/or FAKE NAME FOUND (if following is null then fake name: ${minterAddress}), not including minter card: ${card.identifier}`)
+      continue
+    }
+
     const existingCard = minterNameMap.get(minterName)
     const cardTimestamp = card.updated || card.created || 0
     const existingTimestamp = existingCard?.updated || existingCard?.created || 0
 
-    // Keep only the most recent card for each minterName
     if (!existingCard || cardTimestamp > existingTimestamp) {
       minterNameMap.set(minterName, card)
     }
   }
 
-  // Step 4: Filter cards to ensure each minterName is included only once
   const finalCards = []
   const seenMinterNames = new Set()
 
   for (const [minterName, card] of minterNameMap.entries()) {
     if (!seenMinterNames.has(minterName)) {
       finalCards.push(card)
-      seenMinterNames.add(minterName) // Mark the minterName as seen
+      seenMinterNames.add(minterName)
     }
   }
 
-  // Step 5: Sort by the most recent timestamp
   finalCards.sort((a, b) => {
     const timestampA = a.updated || a.created || 0
     const timestampB = b.updated || b.created || 0
@@ -191,54 +201,41 @@ const processMinterCards = async (validMinterCards) => {
 
 //Main function to load the Minter Cards ----------------------------------------
 const loadCards = async () => {
-  const cardsContainer = document.getElementById("cards-container");
-  cardsContainer.innerHTML = "<p>Loading cards...</p>";
+  const cardsContainer = document.getElementById("cards-container")
+  cardsContainer.innerHTML = "<p>Loading cards...</p>"
 
   try {
-    // const response = await qortalRequest({
-    //   action: "SEARCH_QDN_RESOURCES",
-    //   service: "BLOG_POST",
-    //   query: cardIdentifierPrefix,
-    //   mode: "ALL"
-    // })
 
     const response = await searchSimple('BLOG_POST', `${cardIdentifierPrefix}`, '' , 0)
 
     if (!response || !Array.isArray(response) || response.length === 0) {
-      cardsContainer.innerHTML = "<p>No cards found.</p>";
+      cardsContainer.innerHTML = "<p>No cards found.</p>"
       return;
     }
 
     // Validate cards and filter
     const validatedCards = await Promise.all(
       response.map(async card => {
-        const isValid = await validateCardStructure(card);
-        return isValid ? card : null;
+        const isValid = await validateCardStructure(card)
+        return isValid ? card : null
       })
     );
 
-    const validCards = validatedCards.filter(card => card !== null);
+    const validCards = validatedCards.filter(card => card !== null)
 
     if (validCards.length === 0) {
-      cardsContainer.innerHTML = "<p>No valid cards found.</p>";
-      return;
+      cardsContainer.innerHTML = "<p>No valid cards found.</p>"
+      return
     }
 
     const finalCards = await processMinterCards(validCards)
 
-    // Sort cards by timestamp descending (newest first)
-    // validCards.sort((a, b) => {
-    //   const timestampA = a.updated || a.created || 0;
-    //   const timestampB = b.updated || b.created || 0;
-    //   return timestampB - timestampA;
-    // });
-
     // Display skeleton cards immediately
-    cardsContainer.innerHTML = "";
+    cardsContainer.innerHTML = ""
     finalCards.forEach(card => {
-      const skeletonHTML = createSkeletonCardHTML(card.identifier);
-      cardsContainer.insertAdjacentHTML("beforeend", skeletonHTML);
-    });
+      const skeletonHTML = createSkeletonCardHTML(card.identifier)
+      cardsContainer.insertAdjacentHTML("beforeend", skeletonHTML)
+    })
 
     // Fetch and update each card
     finalCards.forEach(async card => {
@@ -248,57 +245,62 @@ const loadCards = async () => {
           name: card.name,
           service: "BLOG_POST",
           identifier: card.identifier,
-        });
+        })
     
         if (!cardDataResponse) {
-          console.warn(`Skipping invalid card: ${JSON.stringify(card)}`);
-          removeSkeleton(card.identifier);
-          return;
+          console.warn(`Skipping invalid card: ${JSON.stringify(card)}`)
+          removeSkeleton(card.identifier)
+          return
         }
     
-        // Skip cards without polls
         if (!cardDataResponse.poll) {
-          console.warn(`Skipping card with no poll: ${card.identifier}`);
-          removeSkeleton(card.identifier);
-          return;
+          console.warn(`Skipping card with no poll: ${card.identifier}`)
+          removeSkeleton(card.identifier)
+          return
         }
-    
-        // Fetch poll results
-        const pollResults = await fetchPollResults(cardDataResponse.poll);
+
+        const pollPublisherPublicKey = await getPollPublisherPublicKey(cardDataResponse.poll)
+        const cardPublisherPublicKey = await getPublicKeyByName(card.name)
+
+        if (pollPublisherPublicKey != cardPublisherPublicKey) {
+          console.warn(`not displaying card, QuickMythril pollHijack attack found! Discarding card with identifier: ${card.identifier}`)
+          removeSkeleton(card.identifier)
+          return
+        }
+
+        const pollResults = await fetchPollResults(cardDataResponse.poll)
         const BgColor = generateDarkPastelBackgroundBy(card.name)
-        // Generate final card HTML
         const commentCount = await countComments(card.identifier)
         const cardUpdatedTime = card.updated || null
-        const finalCardHTML = await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, BgColor);
+        const finalCardHTML = await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, BgColor)
         
-        replaceSkeleton(card.identifier, finalCardHTML);
+        replaceSkeleton(card.identifier, finalCardHTML)
       } catch (error) {
-        console.error(`Error processing card ${card.identifier}:`, error);
-        removeSkeleton(card.identifier); // Silently remove skeleton on error
+        console.error(`Error processing card ${card.identifier}:`, error)
+        removeSkeleton(card.identifier)
       }
-    });
+    })
     
   } catch (error) {
-    console.error("Error loading cards:", error);
-    cardsContainer.innerHTML = "<p>Failed to load cards.</p>";
+    console.error("Error loading cards:", error)
+    cardsContainer.innerHTML = "<p>Failed to load cards.</p>"
   }
-};
+}
 
 const removeSkeleton = (cardIdentifier) => {
-  const skeletonCard = document.getElementById(`skeleton-${cardIdentifier}`);
+  const skeletonCard = document.getElementById(`skeleton-${cardIdentifier}`)
   if (skeletonCard) {
-    skeletonCard.remove(); // Remove the skeleton silently
+    skeletonCard.remove()
   }
-};
+}
 
 const replaceSkeleton = (cardIdentifier, htmlContent) => {
-  const skeletonCard = document.getElementById(`skeleton-${cardIdentifier}`);
+  const skeletonCard = document.getElementById(`skeleton-${cardIdentifier}`)
   if (skeletonCard) {
-    skeletonCard.outerHTML = htmlContent;
+    skeletonCard.outerHTML = htmlContent
   }
-};
+}
 
-// Function to create a skeleton card
 const createSkeletonCardHTML = (cardIdentifier) => {
   return `
     <div id="skeleton-${cardIdentifier}" class="skeleton-card" style="padding: 10px; border: 1px solid gray; margin: 10px 0;">
@@ -314,28 +316,16 @@ const createSkeletonCardHTML = (cardIdentifier) => {
         <div style="width: 100%; height: 80px; background-color: #eee; color:rgb(17, 24, 28); padding: 0.22vh"><p>PLEASE BE PATIENT</p><p style="color: #11121c"> While data loads from QDN...</div>
       </div>
     </div>
-  `;
-};
-
+  `
+}
 
 // Function to check and fech an existing Minter Card if attempting to publish twice ----------------------------------------
 const fetchExistingCard = async () => {
   try {
-    // Step 1: Perform the search
-    // const response = await qortalRequest({
-    //   action: "SEARCH_QDN_RESOURCES",
-    //   service: "BLOG_POST",
-    //   identifier: cardIdentifierPrefix,
-    //   name: userState.accountName,
-    //   mode: "ALL",
-    //   exactMatchNames: true // Search for the exact userName only when finding existing cards
-    // })
-    // Changed to searchSimple to improve load times. 
     const response = await searchSimple('BLOG_POST', `${cardIdentifierPrefix}`, `${userState.accountName}`, 0)
 
     console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`)
 
-    // Step 2: Check if the response is an array and not empty
     if (!response || !Array.isArray(response) || response.length === 0) {
       console.log("No cards found for the current user.")
       return null
@@ -343,7 +333,6 @@ const fetchExistingCard = async () => {
       return response[0]
     }
 
-    // Validate cards asynchronously, check that they are not comments, etc.
     const validatedCards = await Promise.all(
       response.map(async card => {
         const isValid = await validateCardStructure(card)
@@ -351,14 +340,12 @@ const fetchExistingCard = async () => {
       })
     )
 
-    // Filter out invalid cards
     const validCards = validatedCards.filter(card => card !== null)
 
     if (validCards.length > 0) {
-      // Sort by most recent timestamp
+
       const mostRecentCard = validCards.sort((a, b) => b.created - a.created)[0]
 
-      // Fetch full card data
       const cardDataResponse = await qortalRequest({
         action: "FETCH_QDN_RESOURCE",
         name: userState.accountName, // User's account name
@@ -413,17 +400,16 @@ const loadCardIntoForm = async (cardData) => {
 // Main function to publish a new Minter Card -----------------------------------------------
 const publishCard = async () => {
 
-  const minterGroupData = await fetchMinterGroupMembers();
-  const minterGroupAddresses = minterGroupData.map(m => m.member); // array of addresses
+  const minterGroupData = await fetchMinterGroupMembers()
+  const minterGroupAddresses = minterGroupData.map(m => m.member)
 
-  // 2) check if user is a minter
   const userAddress = userState.accountAddress;
   if (minterGroupAddresses.includes(userAddress)) {
-    alert("You are already a Minter and cannot publish a new card!");
+    alert("You are already a Minter and cannot publish a new card!")
     return;
   }
-  const header = document.getElementById("card-header").value.trim();
-  const content = document.getElementById("card-content").value.trim();
+  const header = document.getElementById("card-header").value.trim()
+  const content = document.getElementById("card-content").value.trim()
   const links = Array.from(document.querySelectorAll(".card-link"))
     .map(input => input.value.trim())
     .filter(link => link.startsWith("qortal://"))
@@ -776,7 +762,7 @@ const toggleComments = async (cardIdentifier) => {
   if (isHidden) {
     // Show comments
     commentButton.textContent = "LOADING..."
-    await displayComments(cardIdentifier);
+    await displayComments(cardIdentifier)
     commentsSection.style.display = 'block'
     // Change the button text to 'HIDE COMMENTS'
     commentButton.textContent = 'HIDE COMMENTS'
