@@ -628,7 +628,7 @@ function clearInputs() {
   document.getElementById('preview-container').innerHTML = ''
 
   // Reset the Quill editor
-  const quill = new Quill('editor')
+  const quill = new Quill('#editor')
     quill.setContents([]) 
     quill.setSelection(0) 
 

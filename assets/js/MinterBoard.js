@@ -72,7 +72,7 @@ const loadMinterBoardPage = async () => {
         }
       } else {
         // No existing card found
-        alert("No existing card found. Create a new card.");
+        console.log("No existing card found. Creating a new card.");
         isExistingCard = false;
       }
 
@@ -322,7 +322,7 @@ const createSkeletonCardHTML = (cardIdentifier) => {
 // Function to check and fech an existing Minter Card if attempting to publish twice ----------------------------------------
 const fetchExistingCard = async () => {
   try {
-    const response = await searchSimple('BLOG_POST', `${cardIdentifierPrefix}`, `${userState.accountName}`, 0)
+    const response = await searchSimple('BLOG_POST', `${cardIdentifierPrefix}`, `${userState.accountName}`, 0, 0, '', true)
 
     console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`)
 
@@ -330,7 +330,20 @@ const fetchExistingCard = async () => {
       console.log("No cards found for the current user.")
       return null
     } else if (response.length === 1) { // we don't need to go through all of the rest of the checks and filtering nonsense if there's only a single result, just return it.
-      return response[0]
+      const mostRecentCard =  response[0]
+
+      const cardDataResponse = await qortalRequest({
+        action: "FETCH_QDN_RESOURCE",
+        name: userState.accountName, // User's account name
+        service: "BLOG_POST",
+        identifier: mostRecentCard.identifier
+      })
+
+      existingCardIdentifier = mostRecentCard.identifier
+      existingCardData = cardDataResponse
+
+      return cardDataResponse
+
     }
 
     const validatedCards = await Promise.all(
