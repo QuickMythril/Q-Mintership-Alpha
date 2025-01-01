@@ -369,36 +369,43 @@
 }
 
 .attachment button {
-    align-self: flex-end;
-    margin-top: 0.8vh;
-    background-color: #0f364c;
-    color: #ffffff;
-    border-style: ridge;
-    border-radius: 1vh;
-    padding: 0.15vh 0.3vh;
-    cursor: pointer;
+  align-self: flex-end;
+  margin-top: 0.8vh;
+  background-color: #0f364c;
+  color: #ffffff;
+  border-style: ridge;
+  border-radius: 1vh;
+  padding: 0.15vh 0.3vh;
+  cursor: pointer;
 }
 
 .image-modal {
   display: none; /* Hidden by default */
   position: fixed; /* Stay in place */
   z-index: 1000; /* Sit on top */
-  left: 10%;
-  top: 15%;
-  width: 80%;
-  height: 70%;
+  /* left: 15%;
+  top: 15%; */
+  width: 85%;
+  height: 75%;
   overflow: none; /* Enable scroll if needed */
   background-color: rgba(0, 0, 0, 0.8); /* Black w/ opacity */
 }
 
+
+.image-modal img {
+  max-width: 95%;
+  max-height: 95%;
+  object-fit: contain; /* Ensures the image maintains its aspect ratio */
+}
+
 .remove-image-button {
-   background-color: #0f4c41;
-    color: #ffffff;
-    border: dotted;
-    border-radius: 1vh;
-    padding: 0.3vh 0.6vh;
-    margin-top: 1px;
-    cursor: pointer;
+  background-color: #0f4c41;
+  color: #ffffff;
+  border: dotted;
+  border-radius: 1vh;
+  padding: 0.3vh 0.6vh;
+  margin-top: 1px;
+  cursor: pointer;
 }
 
 .modal-content {

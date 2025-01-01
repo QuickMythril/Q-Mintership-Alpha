@@ -182,7 +182,6 @@ const extractEncryptedCardsMinterName = (cardIdentifier) => {
 const processCards = async (validEncryptedCards) => {
   const latestCardsMap = new Map()
 
-  // Step 1: Process all cards in parallel
   await Promise.all(validEncryptedCards.map(async card => {
     const timestamp = card.updated || card.created || 0
     const existingCard = latestCardsMap.get(card.identifier)
@@ -194,7 +193,6 @@ const processCards = async (validEncryptedCards) => {
 
   console.log(`latestCardsMap, by timestamp`, latestCardsMap)
 
-  // Step 2: Extract unique cards
   const uniqueValidCards = Array.from(latestCardsMap.values())
 
   return uniqueValidCards
@@ -380,7 +378,7 @@ const fetchExistingEncryptedCard = async (minterName, existingIdentifier) => {
     return decryptedCardData
     
   } catch (error) {
-    console.error("Error fetching existing card:", error);
+    console.error("Error fetching existing card:", error)
     return null
   }
 }
@@ -610,7 +608,7 @@ const fetchEncryptedComments = async (cardIdentifier) => {
   try {
     const response = await searchSimple('MAIL_PRIVATE', `comment-${cardIdentifier}`, '', 0, 0, '', false)
     if (response) {
-      return response;
+      return response
     }
   } catch (error) {
     console.error(`Error fetching comments for ${cardIdentifier}:`, error)
@@ -619,37 +617,108 @@ const fetchEncryptedComments = async (cardIdentifier) => {
 }
 
 // display the comments on the card, with passed cardIdentifier to identify the card --------------
+// const displayEncryptedComments = async (cardIdentifier) => {
+//   try {
+//     const comments = await fetchEncryptedComments(cardIdentifier)
+//     const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`)
+    
+//     for (const comment of comments) {
+//       const commentDataResponse = await qortalRequest({
+//         action: "FETCH_QDN_RESOURCE",
+//         name: comment.name,
+//         service: "MAIL_PRIVATE",
+//         identifier: comment.identifier,
+//         encoding: "base64"
+//       })
+
+//       const decryptedCommentData = await decryptAndParseObject(commentDataResponse)
+//       const timestampCheck = comment.updated || comment.created || 0
+//       const timestamp = await timestampToHumanReadableDate(timestampCheck)
+//       //TODO - add fetching of poll results and checking to see if the commenter has voted and display it as 'supports minter' section.
+//       const commentHTML = `
+//         <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: #1c1c1c;">
+//           <p><strong><u>${decryptedCommentData.creator}</strong>:</p></u>
+//           <p>${decryptedCommentData.content}</p>
+//           <p><i>${timestamp}</p></i>
+//         </div>
+//       `
+//       commentsContainer.insertAdjacentHTML('beforeend', commentHTML)
+//     }
+//   } catch (error) {
+//     console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error)
+//   }
+// }
+//TODO testing this update to the comments fetching to improve performance by leveraging promise.all
 const displayEncryptedComments = async (cardIdentifier) => {
   try {
     const comments = await fetchEncryptedComments(cardIdentifier)
     const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`)
-    
-    for (const comment of comments) {
-      const commentDataResponse = await qortalRequest({
-        action: "FETCH_QDN_RESOURCE",
-        name: comment.name,
-        service: "MAIL_PRIVATE",
-        identifier: comment.identifier,
-        encoding: "base64"
-      })
 
-      const decryptedCommentData = await decryptAndParseObject(commentDataResponse)
-      const timestampCheck = comment.updated || comment.created || 0
-      const timestamp = await timestampToHumanReadableDate(timestampCheck)
-      //TODO - add fetching of poll results and checking to see if the commenter has voted and display it as 'supports minter' section.
-      const commentHTML = `
-        <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: #1c1c1c;">
-          <p><strong><u>${decryptedCommentData.creator}</strong>:</p></u>
-          <p>${decryptedCommentData.content}</p>
-          <p><i>${timestamp}</p></i>
-        </div>
-      `
-      commentsContainer.insertAdjacentHTML('beforeend', commentHTML)
-    }
+    commentsContainer.innerHTML = ''
+
+    const voterMap = globalVoterMap.get(cardIdentifier) || new Map()
+
+    const commentHTMLArray = await Promise.all(
+      comments.map(async (comment) => {
+        try {
+          const commentDataResponse = await qortalRequest({
+            action: "FETCH_QDN_RESOURCE",
+            name: comment.name,
+            service: "MAIL_PRIVATE",
+            identifier: comment.identifier,
+            encoding: "base64",
+          })
+
+          const decryptedCommentData = await decryptAndParseObject(commentDataResponse)
+          const timestampCheck = comment.updated || comment.created || 0
+          const timestamp = await timestampToHumanReadableDate(timestampCheck)
+
+          const commenter = decryptedCommentData.creator
+          const voterInfo = voterMap.get(commenter)
+
+          let commentColor = "transparent"
+          let adminBadge = ""
+
+          if (voterInfo) {
+            if (voterInfo.voterType === "Admin") {
+              // Admin-specific colors
+              commentColor = voterInfo.vote === "yes" ? "rgba(25, 175, 25, 0.6)" : "rgba(194, 39, 62, 0.6)" // Light green for yes, light red for no
+              const badgeColor = voterInfo.vote === "yes" ? "green" : "red"
+              adminBadge = `<span style="color: ${badgeColor}; font-weight: bold; margin-left: 0.5em;">(Admin)</span>`
+            } else {
+              // Non-admin colors
+              commentColor = voterInfo.vote === "yes" ? "rgba(0, 100, 0, 0.3)" : "rgba(100, 0, 0, 0.3)" // Darker green for yes, darker red for no
+            }
+          }
+
+          return `
+            <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: ${commentColor};">
+              <p>
+                <strong><u>${decryptedCommentData.creator}</u></strong>
+                ${adminBadge}
+              </p>
+              <p>${decryptedCommentData.content}</p>
+              <p><i>${timestamp}</i></p>
+            </div>
+          `
+        } catch (err) {
+          console.error(`Error processing comment ${comment.identifier}:`, err)
+          return null // Skip this comment if it fails
+        }
+      })
+    )
+
+    // Add all comments to the container
+    commentHTMLArray
+      .filter((html) => html !== null) // Filter out failed comments
+      .forEach((commentHTML) => {
+        commentsContainer.insertAdjacentHTML('beforeend', commentHTML)
+      })
   } catch (error) {
     console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error)
   }
 }
+
 
 const toggleEncryptedComments = async (cardIdentifier) => {
   const commentsSection = document.getElementById(`comments-section-${cardIdentifier}`)
@@ -689,25 +758,25 @@ const createLinkDisplayModal = async () => {
 // Function to open the modal
 const openLinkDisplayModal = async (link) => {
   const processedLink = await processQortalLinkForRendering(link) // Process the link to replace `qortal://` for rendering in modal
-  const modal = document.getElementById('links-modal');
-  const modalContent = document.getElementById('links-modalContent');
-  modalContent.src = processedLink; // Set the iframe source to the link
-  modal.style.display = 'block'; // Show the modal
+  const modal = document.getElementById('links-modal')
+  const modalContent = document.getElementById('links-modalContent')
+  modalContent.src = processedLink // Set the iframe source to the link
+  modal.style.display = 'block' // Show the modal
 }
 
 // Function to close the modal
 const closeLinkDisplayModal = async () => {
-  const modal = document.getElementById('links-modal');
-  const modalContent = document.getElementById('links-modalContent');
-  modal.style.display = 'none'; // Hide the modal
-  modalContent.src = ''; // Clear the iframe source
+  const modal = document.getElementById('links-modal')
+  const modalContent = document.getElementById('links-modalContent')
+  modal.style.display = 'none' // Hide the modal
+  modalContent.src = '' // Clear the iframe source
 }
 
 const processQortalLinkForRendering = async (link) => {
   if (link.startsWith('qortal://')) {
     const match = link.match(/^qortal:\/\/([^/]+)(\/.*)?$/)
     if (match) {
-      const firstParam = match[1].toUpperCase();
+      const firstParam = match[1].toUpperCase()
       const remainingPath = match[2] || ""
       const themeColor = window._qdnTheme || 'default' // Fallback to 'default' if undefined
       // Simulating async operation if needed
@@ -776,7 +845,7 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
 
   const minterGroupMembers = await fetchMinterGroupMembers()
   const minterAdmins = await fetchMinterGroupAdmins()
-  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0, detailsHtml } = await processPollData(pollResults, minterGroupMembers, minterAdmins, creator)
+  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0, detailsHtml } = await processPollData(pollResults, minterGroupMembers, minterAdmins, creator, cardIdentifier)
   createModal('links')
   createModal('poll-details')
   return `

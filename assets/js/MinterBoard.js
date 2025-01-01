@@ -1,22 +1,22 @@
 // // NOTE - Change isTestMode to false prior to actual release ---- !important - You may also change identifier if you want to not show older cards.
-const testMode = false;
-const cardIdentifierPrefix = "Minter-board-card";
-let isExistingCard = false;
-let existingCardData = {};
-let existingCardIdentifier = {};
+const testMode = false
+const cardIdentifierPrefix = "Minter-board-card"
+let isExistingCard = false
+let existingCardData = {}
+let existingCardIdentifier = {}
 
 const loadMinterBoardPage = async () => {
   // Clear existing content on the page
-  const bodyChildren = document.body.children;
+  const bodyChildren = document.body.children
   for (let i = bodyChildren.length - 1; i >= 0; i--) {
     const child = bodyChildren[i];
     if (!child.classList.contains("menu")) {
-      child.remove();
+      child.remove()
     }
   }
 
   // Add the "Minter Board" content
-  const mainContent = document.createElement("div");
+  const mainContent = document.createElement("div")
   const publishButtonColor = '#527c9d'
   const minterBoardNameColor = '#527c9d'
   mainContent.innerHTML = `
@@ -43,78 +43,78 @@ const loadMinterBoardPage = async () => {
         </form>
       </div>
     </div>
-  `;
-  document.body.appendChild(mainContent);
+  `
+  document.body.appendChild(mainContent)
 
   document.getElementById("publish-card-button").addEventListener("click", async () => {
     try {
-      const fetchedCard = await fetchExistingCard();
+      const fetchedCard = await fetchExistingCard()
       if (fetchedCard) {
         // An existing card is found
         if (testMode) {
           // In test mode, ask user what to do
-          const updateCard = confirm("A card already exists. Do you want to update it?");
+          const updateCard = confirm("A card already exists. Do you want to update it?")
           if (updateCard) {
-            isExistingCard = true;
-            await loadCardIntoForm(existingCardData);
-            alert("Edit your existing card and publish.");
+            isExistingCard = true
+            await loadCardIntoForm(existingCardData)
+            alert("Edit your existing card and publish.")
           } else {
-            alert("Test mode: You can now create a new card.");
-            isExistingCard = false;
-            existingCardData = {}; // Reset
-            document.getElementById("publish-card-form").reset();
+            alert("Test mode: You can now create a new card.")
+            isExistingCard = false
+            existingCardData = {}
+            document.getElementById("publish-card-form").reset()
           }
         } else {
           // Not in test mode, force editing
           alert("A card already exists. Publishing of multiple cards is not allowed. Please update your card.");
           isExistingCard = true;
-          await loadCardIntoForm(existingCardData);
+          await loadCardIntoForm(existingCardData)
         }
       } else {
         // No existing card found
-        console.log("No existing card found. Creating a new card.");
-        isExistingCard = false;
+        console.log("No existing card found. Creating a new card.")
+        isExistingCard = false
       }
 
       // Show the form
-      const publishCardView = document.getElementById("publish-card-view");
+      const publishCardView = document.getElementById("publish-card-view")
       publishCardView.style.display = "flex";
-      document.getElementById("cards-container").style.display = "none";
+      document.getElementById("cards-container").style.display = "none"
     } catch (error) {
-      console.error("Error checking for existing card:", error);
-      alert("Failed to check for existing card. Please try again.");
+      console.error("Error checking for existing card:", error)
+      alert("Failed to check for existing card. Please try again.")
     }
-  });
+  })
 
   document.getElementById("refresh-cards-button").addEventListener("click", async () => {
-    const cardsContainer = document.getElementById("cards-container");
-    cardsContainer.innerHTML = "<p>Refreshing cards...</p>";
+    const cardsContainer = document.getElementById("cards-container")
+    cardsContainer.innerHTML = "<p>Refreshing cards...</p>"
     await loadCards();
-  });
+  })
   
 
   document.getElementById("cancel-publish-button").addEventListener("click", async () => {
-    const cardsContainer = document.getElementById("cards-container");
+    const cardsContainer = document.getElementById("cards-container")
     cardsContainer.style.display = "flex"; // Restore visibility
-    const publishCardView = document.getElementById("publish-card-view");
+    const publishCardView = document.getElementById("publish-card-view")
     publishCardView.style.display = "none"; // Hide the publish form
-  });
+  })
 
   document.getElementById("add-link-button").addEventListener("click", async () => {
-    const linksContainer = document.getElementById("links-container");
-    const newLinkInput = document.createElement("input");
-    newLinkInput.type = "text";
-    newLinkInput.className = "card-link";
-    newLinkInput.placeholder = "Enter QDN link";
-    linksContainer.appendChild(newLinkInput);
-  });
+    const linksContainer = document.getElementById("links-container")
+    const newLinkInput = document.createElement("input")
+    newLinkInput.type = "text"
+    newLinkInput.className = "card-link"
+    newLinkInput.placeholder = "Enter QDN link"
+    linksContainer.appendChild(newLinkInput)
+  })
 
   document.getElementById("publish-card-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    await publishCard();
-  });
+    event.preventDefault()
+    await publishCard()
+  })
 
-  await loadCards();
+  await loadCards()
 }
 
 const extractMinterCardsMinterName = async (cardIdentifier) => {
@@ -343,7 +343,6 @@ const fetchExistingCard = async () => {
       existingCardData = cardDataResponse
 
       return cardDataResponse
-
     }
 
     const validatedCards = await Promise.all(
@@ -406,7 +405,7 @@ const loadCardIntoForm = async (cardData) => {
     linkInput.type = "text"
     linkInput.className = "card-link"
     linkInput.value = link;
-    linksContainer.appendChild(linkInput);
+    linksContainer.appendChild(linkInput)
   })
 }
 
@@ -419,7 +418,7 @@ const publishCard = async () => {
   const userAddress = userState.accountAddress;
   if (minterGroupAddresses.includes(userAddress)) {
     alert("You are already a Minter and cannot publish a new card!")
-    return;
+    return
   }
   const header = document.getElementById("card-header").value.trim()
   const content = document.getElementById("card-content").value.trim()
@@ -487,7 +486,9 @@ const publishCard = async () => {
   }
 }
 
-const processPollData= async (pollData, minterGroupMembers, minterAdmins, creator) => {
+let globalVoterMap = new Map()
+
+const processPollData= async (pollData, minterGroupMembers, minterAdmins, creator, cardIdentifier) => {
   if (!pollData || !Array.isArray(pollData.voteWeights) || !Array.isArray(pollData.votes)) {
     console.warn("Poll data is missing or invalid. pollData:", pollData)
     return {
@@ -574,6 +575,29 @@ const processPollData= async (pollData, minterGroupMembers, minterAdmins, creato
       blocksMinted
     }
   })
+ //TODO verify this new voterPromises async function works better.
+  // const voterPromises = pollData.votes.map(async (vote) => {
+  //   const voterPublicKey = vote.voterPublicKey;
+  //   const voterAddress = await getAddressFromPublicKey(voterPublicKey);
+  
+  //   const [nameInfo, addressInfo] = await Promise.all([
+  //     getNameFromAddress(voterAddress).catch(() => ""),
+  //     getAddressInfo(voterAddress).catch(() => ({})),
+  //   ]);
+  
+  //   const voterName = nameInfo || (nameInfo === voterAddress ? "" : voterAddress);
+  //   const blocksMinted = addressInfo?.blocksMinted || 0;
+  
+  //   return {
+  //     optionIndex: vote.optionIndex,
+  //     voterPublicKey,
+  //     voterAddress,
+  //     voterName,
+  //     isAdmin: adminAddresses.includes(voterAddress),
+  //     isMinter: memberAddresses.includes(voterAddress),
+  //     blocksMinted,
+  //   };
+  // });
 
   const allVoters = await Promise.all(voterPromises)
   const yesVoters = []
@@ -591,8 +615,11 @@ const processPollData= async (pollData, minterGroupMembers, minterAdmins, creato
     }
   }
 
-  yesVoters.sort((a,b) => b.blocksMinted - a.blocksMinted);
-  noVoters.sort((a,b) => b.blocksMinted - a.blocksMinted);
+  yesVoters.sort((a,b) => b.blocksMinted - a.blocksMinted)
+  noVoters.sort((a,b) => b.blocksMinted - a.blocksMinted)
+  const sortedAllVoters = allVoters.sort((a,b) => b.blocksMinted - a.blocksMinted)
+  await createVoterMap(sortedAllVoters, cardIdentifier)
+
   const yesTableHtml = buildVotersTableHtml(yesVoters, /* tableColor= */ "green")
   const noTableHtml = buildVotersTableHtml(noVoters, /* tableColor= */ "red")
   const detailsHtml = `
@@ -620,13 +647,26 @@ const processPollData= async (pollData, minterGroupMembers, minterAdmins, creato
   }
 }
 
+const createVoterMap = async (voters, cardIdentifier) => {
+  const voterMap = new Map()
+  voters.forEach((voter) => {
+    const voterNameOrAddress = voter.voterName || voter.voterAddress
+    voterMap.set(voterNameOrAddress, {
+      vote: voter.optionIndex === 0 ? "yes" : "no", // Use optionIndex directly
+      voterType: voter.isAdmin ? "Admin" : voter.isMinter ? "Minter" : "User",
+      blocksMinted: voter.blocksMinted,
+    })
+  })
+  globalVoterMap.set(cardIdentifier, voterMap)
+}
+
 const buildVotersTableHtml = (voters, tableColor) => {
   if (!voters.length) {
-    return `<p>No voters here.</p>`;
+    return `<p>No voters here.</p>`
   }
 
   // Decide extremely dark background for the <tbody>
-  let bodyBackground;
+  let bodyBackground
   if (tableColor === "green") {
     bodyBackground = "rgba(0, 18, 0, 0.8)" // near-black green
   } else if (tableColor === "red") {
@@ -661,7 +701,7 @@ const buildVotersTableHtml = (voters, tableColor) => {
       <tbody style="background-color: ${bodyBackground}; color: #c6c6c6;">
         ${voters
           .map(v => {
-            const userType = v.isAdmin ? "Admin" : v.isMinter ? "Minter" : "User";
+            const userType = v.isAdmin ? "Admin" : v.isMinter ? "Minter" : "User"
             const pollName = v.pollName
             const displayName =
               v.voterName
@@ -735,29 +775,95 @@ const fetchCommentsForCard = async (cardIdentifier) => {
 }
 
 // display the comments on the card, with passed cardIdentifier to identify the card --------------
+// const displayComments = async (cardIdentifier) => {
+//   try {
+//     const comments = await fetchCommentsForCard(cardIdentifier);
+//     const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`)
+    
+//     for (const comment of comments) {
+//       const commentDataResponse = await qortalRequest({
+//         action: "FETCH_QDN_RESOURCE",
+//         name: comment.name,
+//         service: "BLOG_POST",
+//         identifier: comment.identifier,
+//       })
+//       const timestamp = await timestampToHumanReadableDate(commentDataResponse.timestamp)
+//       const commentHTML = `
+//         <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: #1c1c1c;">
+//           <p><strong><u>${commentDataResponse.creator}</strong>:</p></u>
+//           <p>${commentDataResponse.content}</p>
+//           <p><i>${timestamp}</p></i>
+//         </div>
+//       `
+//       commentsContainer.insertAdjacentHTML('beforeend', commentHTML)
+//     }
+
+//   } catch (error) {
+//     console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error)
+//   }
+// }
+
 const displayComments = async (cardIdentifier) => {
   try {
-    const comments = await fetchCommentsForCard(cardIdentifier);
+    const comments = await fetchCommentsForCard(cardIdentifier)
     const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`)
-    
-    for (const comment of comments) {
-      const commentDataResponse = await qortalRequest({
-        action: "FETCH_QDN_RESOURCE",
-        name: comment.name,
-        service: "BLOG_POST",
-        identifier: comment.identifier,
-      })
-      const timestamp = await timestampToHumanReadableDate(commentDataResponse.timestamp)
-      const commentHTML = `
-        <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: #1c1c1c;">
-          <p><strong><u>${commentDataResponse.creator}</strong>:</p></u>
-          <p>${commentDataResponse.content}</p>
-          <p><i>${timestamp}</p></i>
-        </div>
-      `
-      commentsContainer.insertAdjacentHTML('beforeend', commentHTML)
-    }
 
+    commentsContainer.innerHTML = ''
+
+    const voterMap = globalVoterMap.get(cardIdentifier) || new Map()
+
+    const commentHTMLArray = await Promise.all(
+      comments.map(async (comment) => {
+        try {
+          const commentDataResponse = await qortalRequest({
+            action: "FETCH_QDN_RESOURCE",
+            name: comment.name,
+            service: "BLOG_POST",
+            identifier: comment.identifier,
+          })
+
+          const timestamp = await timestampToHumanReadableDate(commentDataResponse.timestamp);
+
+          const commenter = commentDataResponse.creator
+          const voterInfo = voterMap.get(commenter)
+
+          let commentColor = "transparent"
+          let adminBadge = ""
+
+          if (voterInfo) {
+            if (voterInfo.voterType === "Admin") {
+            
+              commentColor = voterInfo.vote === "yes" ? "rgba(21, 150, 21, 0.6)" : "rgba(212, 37, 64, 0.6)" // Light green for yes, light red for no
+              const badgeColor = voterInfo.vote === "yes" ? "green" : "red"
+              adminBadge = `<span style="color: ${badgeColor}; font-weight: bold; margin-left: 0.5em;">(Admin)</span>`
+            } else {
+
+              commentColor = voterInfo.vote === "yes" ? "rgba(0, 100, 0, 0.3)" : "rgba(100, 0, 0, 0.3)" // Darker green for yes, darker red for no
+            }
+          }
+
+          return `
+            <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: ${commentColor};">
+              <p>
+                <strong><u>${commentDataResponse.creator}</u></strong>
+                ${adminBadge}
+              </p>
+              <p>${commentDataResponse.content}</p>
+              <p><i>${timestamp}</i></p>
+            </div>
+          `
+        } catch (err) {
+          console.error(`Error processing comment ${comment.identifier}:`, err)
+          return null
+        }
+      })
+    )
+
+    commentHTMLArray
+      .filter((html) => html !== null) // Filter out failed comments
+      .forEach((commentHTML) => {
+        commentsContainer.insertAdjacentHTML('beforeend', commentHTML)
+      })
   } catch (error) {
     console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error)
   }
@@ -935,7 +1041,7 @@ const generateDarkPastelBackgroundBy = (name) => {
 
 // Create the overall Minter Card HTML -----------------------------------------------
 const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, BgColor) => {
-  const { header, content, links, creator, timestamp, poll } = cardData;
+  const { header, content, links, creator, timestamp, poll } = cardData
   const formattedDate = cardUpdatedTime ? new Date(cardUpdatedTime).toLocaleString() : new Date(timestamp).toLocaleString()
   const avatarHtml = await getMinterAvatar(creator)
   const linksHTML = links.map((link, index) => `
@@ -946,7 +1052,7 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
 
   const minterGroupMembers = await fetchMinterGroupMembers()
   const minterAdmins = await fetchMinterGroupAdmins()
-  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0, detailsHtml } = await processPollData(pollResults, minterGroupMembers, minterAdmins, creator)
+  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0, detailsHtml } = await processPollData(pollResults, minterGroupMembers, minterAdmins, creator, cardIdentifier)
   createModal('links')
   createModal('poll-details')
 
@@ -1003,6 +1109,6 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
     </div>
     <p style="font-size: 0.75rem; margin-top: 3vh; color: #4496a1">By: ${creator} - ${formattedDate}</p>
   </div>
-  `;
+  `
 }
 
