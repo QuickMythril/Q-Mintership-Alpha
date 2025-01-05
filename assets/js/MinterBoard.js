@@ -4,6 +4,9 @@ const cardIdentifierPrefix = "Minter-board-card"
 let isExistingCard = false
 let existingCardData = {}
 let existingCardIdentifier = {}
+const MIN_ADMIN_YES_VOTES = 9;
+const MINTER_INVITE_BLOCK_HEIGHT = 9999999; // Example height, update later
+let isApproved = false
 
 const loadMinterBoardPage = async () => {
   // Clear existing content on the page
@@ -28,7 +31,7 @@ const loadMinterBoardPage = async () => {
       <div id="cards-container" class="cards-container" style="margin-top: 20px;"></div>
       <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
         <form id="publish-card-form">
-          <h3>Create or Update Your Minter Card</h3>
+          <h3>Create or Update Your Card</h3>
           <label for="card-header">Header:</label>
           <input type="text" id="card-header" maxlength="100" placeholder="Enter card header" required>
           <label for="card-content">Content:</label>
@@ -45,6 +48,7 @@ const loadMinterBoardPage = async () => {
     </div>
   `
   document.body.appendChild(mainContent)
+  createScrollToTopButton()
 
   document.getElementById("publish-card-button").addEventListener("click", async () => {
     try {
@@ -331,7 +335,7 @@ const fetchExistingCard = async () => {
       return null
     } else if (response.length === 1) { // we don't need to go through all of the rest of the checks and filtering nonsense if there's only a single result, just return it.
       const mostRecentCard =  response[0]
-
+      isExistingCard = true
       const cardDataResponse = await qortalRequest({
         action: "FETCH_QDN_RESOURCE",
         name: userState.accountName, // User's account name
@@ -341,6 +345,7 @@ const fetchExistingCard = async () => {
 
       existingCardIdentifier = mostRecentCard.identifier
       existingCardData = cardDataResponse
+      isExistingCard = true
 
       return cardDataResponse
     }
@@ -367,6 +372,7 @@ const fetchExistingCard = async () => {
 
       existingCardIdentifier = mostRecentCard.identifier
       existingCardData = cardDataResponse
+      isExistingCard = true
 
       console.log("Full card data fetched successfully:", cardDataResponse)
 
@@ -472,6 +478,7 @@ const publishCard = async () => {
 
     if (isExistingCard){
       alert("Card Updated Successfully! (No poll updates are possible at this time...)")
+      isExistingCard = false
     }
 
     document.getElementById("publish-card-form").reset()
@@ -575,29 +582,6 @@ const processPollData= async (pollData, minterGroupMembers, minterAdmins, creato
       blocksMinted
     }
   })
- //TODO verify this new voterPromises async function works better.
-  // const voterPromises = pollData.votes.map(async (vote) => {
-  //   const voterPublicKey = vote.voterPublicKey;
-  //   const voterAddress = await getAddressFromPublicKey(voterPublicKey);
-  
-  //   const [nameInfo, addressInfo] = await Promise.all([
-  //     getNameFromAddress(voterAddress).catch(() => ""),
-  //     getAddressInfo(voterAddress).catch(() => ({})),
-  //   ]);
-  
-  //   const voterName = nameInfo || (nameInfo === voterAddress ? "" : voterAddress);
-  //   const blocksMinted = addressInfo?.blocksMinted || 0;
-  
-  //   return {
-  //     optionIndex: vote.optionIndex,
-  //     voterPublicKey,
-  //     voterAddress,
-  //     voterName,
-  //     isAdmin: adminAddresses.includes(voterAddress),
-  //     isMinter: memberAddresses.includes(voterAddress),
-  //     blocksMinted,
-  //   };
-  // });
 
   const allVoters = await Promise.all(voterPromises)
   const yesVoters = []
@@ -774,35 +758,6 @@ const fetchCommentsForCard = async (cardIdentifier) => {
   }
 }
 
-// display the comments on the card, with passed cardIdentifier to identify the card --------------
-// const displayComments = async (cardIdentifier) => {
-//   try {
-//     const comments = await fetchCommentsForCard(cardIdentifier);
-//     const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`)
-    
-//     for (const comment of comments) {
-//       const commentDataResponse = await qortalRequest({
-//         action: "FETCH_QDN_RESOURCE",
-//         name: comment.name,
-//         service: "BLOG_POST",
-//         identifier: comment.identifier,
-//       })
-//       const timestamp = await timestampToHumanReadableDate(commentDataResponse.timestamp)
-//       const commentHTML = `
-//         <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: #1c1c1c;">
-//           <p><strong><u>${commentDataResponse.creator}</strong>:</p></u>
-//           <p>${commentDataResponse.content}</p>
-//           <p><i>${timestamp}</p></i>
-//         </div>
-//       `
-//       commentsContainer.insertAdjacentHTML('beforeend', commentHTML)
-//     }
-
-//   } catch (error) {
-//     console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error)
-//   }
-// }
-
 const displayComments = async (cardIdentifier) => {
   try {
     const comments = await fetchCommentsForCard(cardIdentifier)
@@ -901,6 +856,8 @@ const countComments = async (cardIdentifier) => {
     return 0
   }
 }
+
+
 
 const createModal = (modalType='') => {
   if (document.getElementById(`${modalType}-modal`)) {
@@ -1039,6 +996,68 @@ const generateDarkPastelBackgroundBy = (name) => {
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`
 }
 
+const handleInviteMinter = async (minterName) => {
+  try {
+    const blockInfo = await getLatestBlockInfo()
+    const blockHeight = toString(blockInfo.height)
+    if (blockHeight <= MINTER_INVITE_BLOCK_HEIGHT) {
+      console.log(`block height is under the featureTrigger height`)
+    }
+    const minterAccountInfo = await getNameInfo(minterName)
+    const minterAddress = await minterAccountInfo.owner
+    const adminPublicKey = await getPublicKeyByName(userState.accountName)
+    console.log(`about to attempt group invite, minterAddress: ${minterAddress}, adminPublicKey: ${adminPublicKey}`)
+    const inviteTransaction = await createGroupInviteTransaction(minterAddress, adminPublicKey, 694, minterAddress, 864000, 0)
+
+    // Step 2: Sign the transaction using qortalRequest
+    const signedTransaction = await qortalRequest({
+        action: "SIGN_TRANSACTION",
+        unsignedBytes: inviteTransaction
+    })
+
+    // Step 3: Process the transaction
+    console.warn(`signed transaction`,signedTransaction)
+    const processResponse = await processTransaction(signedTransaction)
+
+    if (processResponse?.status === "OK") {
+        alert(`${minterName} has been successfully invited!`)
+    } else {
+        alert("Failed to process the invite transaction.")
+    }
+  } catch (error) {
+      console.error("Error inviting minter:", error)
+      alert("Error inviting minter. Please try again.")
+  }
+}
+
+const createInviteButtonHtml = (creator, cardIdentifier) => {
+  return `
+      <div id="invite-button-container-${cardIdentifier}" style="margin-top: 1em;">
+          <button onclick="handleInviteMinter('${creator}')"
+                  style="padding: 10px; background:rgb(0, 109, 76) ; color: white; border: dotted; cursor: pointer; border-radius: 5px;"
+                  onmouseover="this.style.backgroundColor='rgb(25, 47, 39) '"
+                  onmouseout="this.style.backgroundColor='rgba(7, 122, 101, 0.63) '"
+                  >
+              Invite Minter
+          </button>
+      </div>
+  `
+}
+
+const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) => {
+  const latestBlockInfo = await getLatestBlockInfo()
+  const isBlockPassed = latestBlockInfo.height > MINTER_INVITE_BLOCK_HEIGHT
+
+  if (adminYes >= 9 && userState.isMinterAdmin) {
+      const inviteButtonHtml = createInviteButtonHtml(creator, cardIdentifier)
+      console.log(`admin votes over 9, creating invite button...`, adminYes)
+    return inviteButtonHtml
+  }
+
+  return null
+}
+
+
 // Create the overall Minter Card HTML -----------------------------------------------
 const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, BgColor) => {
   const { header, content, links, creator, timestamp, poll } = cardData
@@ -1056,6 +1075,9 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
   createModal('links')
   createModal('poll-details')
 
+  const inviteButtonHtml = await checkAndDisplayInviteButton(adminYes, creator, cardIdentifier)
+  const inviteHtmlAdd = (inviteButtonHtml) ? inviteButtonHtml : ''
+
   return `
   <div class="minter-card" style="background-color: ${BgColor}">
     <div class="minter-card-header">
@@ -1063,20 +1085,21 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
       <h3>${creator}</h3>
       <p>${header}</p>
     </div>
-    <div class="support-header"><h5>MINTER'S POST</h5></div>
+    <div class="support-header"><h5>USER'S POST</h5></div>
     <div class="info">
       ${content}
     </div>
-    <div class="support-header"><h5>MINTER'S LINKS</h5></div>
+    <div class="support-header"><h5>USER'S LINKS</h5></div>
     <div class="info-links">
       ${linksHTML}
     </div>
-    <div class="results-header support-header"><h5>CURRENT RESULTS</h5></div>
+    <div class="results-header support-header"><h5>CURRENT SUPPORT RESULTS</h5></div>
     <div class="minter-card-results">
       <button onclick="togglePollDetails('${cardIdentifier}')">Display Poll Details</button>
       <div id="poll-details-${cardIdentifier}" style="display: none;">
         ${detailsHtml}
       </div>
+      ${inviteHtmlAdd}
       <div class="admin-results">
         <span class="admin-yes">Admin Yes: ${adminYes}</span>
         <span class="admin-no">Admin No: ${adminNo}</span>
@@ -1092,7 +1115,7 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
         <span class="total-no">Weight: ${totalNoWeight}</span>
       </div>
     </div>
-    <div class="support-header"><h5>SUPPORT</h5><h5 style="color: #ffae42;">${creator}</h5>
+    <div class="support-header"><h5>SUPPORT ACTION FOR </h5><h5 style="color: #ffae42;">${creator}</h5>
     <p style="color: #c7c7c7; font-size: .65rem; margin-top: 1vh">(click COMMENTS button to open/close card comments)</p>
     </div>
     <div class="actions">

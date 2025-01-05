@@ -227,6 +227,7 @@ const verifyUserIsAdmin = async () => {
 }
 
 
+
 const verifyAddressIsAdmin = async (address) => {
     console.log('verifyAddressIsAdmin called')
     console.log('address:', address)
@@ -857,17 +858,12 @@ const searchResourcesWithStatus = async (query, limit, status = 'local') => {
 }
 
 const getResourceMetadata = async (service, name, identifier) => {
-    console.log('getResourceMetadata called')
-    console.log('service:', service)
-    console.log('name:', name)
-    console.log('identifier:', identifier)
     try {
         const response = await fetch(`${baseUrl}/arbitrary/metadata/${service}/${name}/${identifier}`, {
             method: 'GET',
             headers: { 'accept': 'application/json' }
         })
         const data = await response.json()
-        console.log('Fetched resource metadata:', data)
         return data
     } catch (error) {
         console.error('Error fetching resource metadata:', error)
@@ -888,22 +884,35 @@ const fetchFileBase64 = async (service, name, identifier) => {
     }
 }
 
-async function loadImageHtml(service, name, identifier, filename, mimeType) {
+const loadInLineImageHtml = async (service, name, identifier, filename, mimeType, room='admins') => {
+    let isEncrypted = false
+
+    if (room === 'admins'){
+        isEncrypted = true
+    }
+    
+    if ((service === "MAIL_PRIVATE") && (room === 'admins')) {
+        service = "FILE_PRIVATE" 
+    }
+
     try {
-        const url = `${baseUrl}/arbitrary/${service}/${name}/${identifier}`
-        // Fetch the file as a blob
-        const response = await fetch(url)
-        // Convert the response to a Blob
-        const fileBlob = new Blob([response], { type: mimeType })
-        // Create an Object URL from the Blob
-        const objectUrl = URL.createObjectURL(fileBlob)
-        // Use the Object URL as the image source
+        const url = `${baseUrl}/arbitrary/${service}/${name}/${identifier}?encoding=base64`
+
+        const response = await fetch(url,{
+            method: 'GET',
+            headers: { 'accept': 'text/plain' }
+        })
+
+        const data64 = await response.text()
+        const decryptedBase64 = await decryptObject(data64)
+        const base64 = isEncrypted ? decryptedBase64 : data64
+        const objectUrl = base64ToBlobUrl(base64, mimeType)
         const attachmentHtml = `<div class="attachment"><img src="${objectUrl}" alt="${filename}" class="inline-image"></div>`
 
         return attachmentHtml
 
     } catch (error) {
-        console.error("Error fetching the image:", error)
+        console.error("Error loading in-line image HTML:", error)
     }
 }
 
@@ -932,18 +941,14 @@ const fetchAndSaveAttachment = async (service, name, identifier, filename, mimeT
           throw new Error(`File not found (HTTP ${response.status}): ${urlPrivate}`)
         }
   
-        // 2) Get the encrypted base64 text
         const encryptedBase64Data = await response.text()
         console.log("Fetched Encrypted Base64 Data:", encryptedBase64Data)
   
-        // 3) Decrypt => returns decrypted base64
         const decryptedBase64 = await decryptObject(encryptedBase64Data)
         console.log("Decrypted Base64 Data:", decryptedBase64)
   
-        // 4) Convert that to a Blob
         const fileBlob = base64ToBlob(decryptedBase64, mimeType)
   
-        // 5) Save the file using qortalRequest
         await qortalRequest({
           action: "SAVE_FILE",
           blob: fileBlob,
@@ -978,7 +983,7 @@ const fetchAndSaveAttachment = async (service, name, identifier, filename, mimeT
         error
       )
     }
-  }
+}
   
 
 /**
@@ -999,6 +1004,18 @@ const base64ToBlob = (base64String, mimeType) => {
     // Create a blob from the Uint8Array
     return new Blob([bytes], { type: mimeType })
   }
+
+const base64ToBlobUrl = (base64, mimeType) => {
+    const binary = atob(base64)
+    const array = []
+
+    for (let i = 0; i < binary.length; i++) {
+        array.push(binary.charCodeAt(i))
+    }
+
+    const blob = new Blob([new Uint8Array(array)], { type: mimeType })
+    return URL.createObjectURL(blob)
+}
   
 
   const fetchEncryptedImageBase64 = async (service, name, identifier, mimeType) => {
@@ -1157,6 +1174,129 @@ const voteYesOnPoll = async (poll) => {
       optionIndex: 1,
     })
 }
+
+// Qortal Transaction-related calls ---------------------------------------------------------------------------
+
+const processTransaction = async (rawTransaction) => {
+    try {
+        const response = await fetch(`${baseUrl}/transactions/process`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'text/plain',
+                'X-API-VERSION': '2',
+                'Content-Type': 'text/plain'
+            },
+            body: rawTransaction
+        })
+
+        if (!response.ok) throw new Error(`Transaction processing failed: ${response.status}`)
+        
+        const result = await response.text()
+        console.log("Transaction successfully processed:", result)
+        return result
+    } catch (error) {
+        console.error("Error processing transaction:", error)
+        throw error
+    }
+}
+
+// Create a group invite transaction. This will utilize a default timeToLive (which is how long the tx will be alive, not the time until it IS live...) of 10 days in seconds, as the legacy UI has a bug that doesn't display invites older than 10 days.
+// We will also default to the MINTER group for groupId, AFTER the GROUP_APPROVAL changes, the txGroupId will need to be set for tx that require approval.
+const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, groupId=694, invitee, timeToLive = 864000, txGroupId = 0) => {
+
+    try {
+        // Fetch account reference correctly
+        const accountInfo = await getAddressInfo(recipientAddress)
+        const accountReference = accountInfo.reference
+
+        // Validate inputs before making the request
+        if (!adminPublicKey || !accountReference || !recipientAddress) {
+            throw new Error("Missing required parameters for group invite transaction.")
+        }
+
+        const payload = {
+            timestamp: Date.now(), 
+            reference: accountReference, 
+            fee: 0.01,
+            txGroupId: txGroupId, 
+            recipient: recipientAddress, 
+            adminPublicKey: adminPublicKey, 
+            groupId: groupId, 
+            invitee: invitee || recipientAddress, 
+            timeToLive: timeToLive
+        }
+
+        console.log("Sending group invite transaction payload:", payload)
+
+        const response = await fetch(`${baseUrl}/groups/invite`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'text/plain',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+
+        if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`Failed to create transaction: ${response.status}, ${errorText}`)
+        }
+        
+        const rawTransaction = await response.text()
+        console.log("Raw unsigned transaction created:", rawTransaction)
+        return rawTransaction
+    } catch (error) {
+        console.error("Error creating group invite transaction:", error)
+        throw error
+    }
+}
+
+
+const getLatestBlockInfo = async () => {
+    try {
+        const response = await fetch(`${baseUrl}/blocks/last`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        })
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch last block data: ${response.status}`);
+        }
+
+        const blockData = await response.json();
+
+        // Validate and ensure the structure matches the desired format
+        const formattedBlockData = {
+            signature: blockData.signature || "",
+            version: blockData.version || 0,
+            reference: blockData.reference || "",
+            transactionCount: blockData.transactionCount || 0,
+            totalFees: blockData.totalFees || "0",
+            transactionsSignature: blockData.transactionsSignature || "",
+            height: blockData.height || 0,
+            timestamp: blockData.timestamp || 0,
+            minterPublicKey: blockData.minterPublicKey || "",
+            minterSignature: blockData.minterSignature || "",
+            atCount: blockData.atCount || 0,
+            atFees: blockData.atFees || "0",
+            encodedOnlineAccounts: blockData.encodedOnlineAccounts || "",
+            onlineAccountsCount: blockData.onlineAccountsCount || 0,
+            minterAddress: blockData.minterAddress || "",
+            minterLevel: blockData.minterLevel || 0
+        }
+
+        console.log("Last Block Data:", formattedBlockData)
+        return formattedBlockData
+
+    } catch (error) {
+        console.error("Error fetching last block data:", error)
+        return null
+    }
+}
+
+
 
 // export {
 //     userState,

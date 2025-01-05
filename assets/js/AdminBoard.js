@@ -99,11 +99,10 @@ const loadAdminBoardPage = async () => {
   document.getElementById("publish-card-form").addEventListener("submit", async (event) => {
     event.preventDefault()
     const isTopicChecked = document.getElementById("topic-checkbox").checked
-  
     // Pass that boolean to publishEncryptedCard
     await publishEncryptedCard(isTopicChecked)
   })
-
+  createScrollToTopButton()
   // await fetchAndValidateAllAdminCards()
   await fetchAllEncryptedCards()
   await updateOrSaveAdminGroupsDataLocally()

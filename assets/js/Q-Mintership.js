@@ -1,12 +1,12 @@
-const messageIdentifierPrefix = `mintership-forum-message`;
-const messageAttachmentIdentifierPrefix = `mintership-forum-attachment`;
+const messageIdentifierPrefix = `mintership-forum-message`
+const messageAttachmentIdentifierPrefix = `mintership-forum-attachment`
 
 // NOTE - SET adminGroups in QortalApi.js to enable admin access to forum for specific groups. Minter Admins will be fetched automatically.
 
-let replyToMessageIdentifier = null;
-let latestMessageIdentifiers = {}; // To keep track of the latest message in each room
-let currentPage = 0; // Track current pagination page
-let existingIdentifiers = new Set(); // Keep track of existing identifiers to not pull them more than once.
+let replyToMessageIdentifier = null
+let latestMessageIdentifiers = {} // To keep track of the latest message in each room
+let currentPage = 0 // Track current pagination page
+let existingIdentifiers = new Set() // Keep track of existing identifiers to not pull them more than once.
 
 let messagesById = {}
 let messageOrder =[]
@@ -22,38 +22,38 @@ const storeMessageInMap = (msg) => {
   messagesById[msg.identifier] = msg
   // We will keep an array 'messageOrder' to store the messages and limit the size they take
   messageOrder.push({ identifier: msg.identifier, timestamp: msg.timestamp })
-  messageOrder.sort((a, b) => a.timestamp - b.timestamp);
+  messageOrder.sort((a, b) => a.timestamp - b.timestamp)
 
   while (messageOrder.length > MAX_MESSAGES) {
     // Remove oldest from the front
-    const oldest = messageOrder.shift();
+    const oldest = messageOrder.shift()
     // Delete from the map as well
-    delete messagesById[oldest.identifier];
+    delete messagesById[oldest.identifier]
   }
 }
 
 function saveMessagesToLocalStorage() {
   try {
-    const data = { messagesById, messageOrder };
-    localStorage.setItem("forumMessages", JSON.stringify(data));
-    console.log("Saved messages to localStorage. Count:", messageOrder.length);
+    const data = { messagesById, messageOrder }
+    localStorage.setItem("forumMessages", JSON.stringify(data))
+    console.log("Saved messages to localStorage. Count:", messageOrder.length)
   } catch (error) {
-    console.error("Error saving to localStorage:", error);
+    console.error("Error saving to localStorage:", error)
   }
 }
 
 function loadMessagesFromLocalStorage() {
   try {
-    const stored = localStorage.getItem("forumMessages");
+    const stored = localStorage.getItem("forumMessages")
     if (!stored) {
-      console.log("No saved messages in localStorage.");
+      console.log("No saved messages in localStorage.")
       return;
     }
     const parsed = JSON.parse(stored);
     if (parsed.messagesById && parsed.messageOrder) {
       messagesById = parsed.messagesById;
       messageOrder = parsed.messageOrder;
-      console.log(`Loaded ${messageOrder.length} messages from localStorage.`);
+      console.log(`Loaded ${messageOrder.length} messages from localStorage.`)
     }
   } catch (error) {
     console.error("Error loading messages from localStorage:", error);
@@ -61,40 +61,42 @@ function loadMessagesFromLocalStorage() {
 }
 
 if (localStorage.getItem("latestMessageIdentifiers")) {
-  latestMessageIdentifiers = JSON.parse(localStorage.getItem("latestMessageIdentifiers"));
+  latestMessageIdentifiers = JSON.parse(localStorage.getItem("latestMessageIdentifiers"))
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  console.log("DOMContentLoaded fired!");
+  console.log("DOMContentLoaded fired!")
 
   // --- GENERAL LINKS (MINTERSHIP-FORUM and MINTER-BOARD) ---
-  const mintershipForumLinks = document.querySelectorAll('a[href="MINTERSHIP-FORUM"]');
+  const mintershipForumLinks = document.querySelectorAll('a[href="MINTERSHIP-FORUM"]')
   mintershipForumLinks.forEach(link => {
     link.addEventListener('click', async (event) => {
-      event.preventDefault();
+      event.preventDefault()
       if (!userState.isLoggedIn) {
-        await login();
+        await login()
       }
       await loadForumPage();
-      loadRoomContent("general");
-      startPollingForNewMessages();
-    });
-  });
+      loadRoomContent("general")
+      startPollingForNewMessages()
+      createScrollToTopButton()
+    })
+  })
 
-  const minterBoardLinks = document.querySelectorAll('a[href="MINTER-BOARD"], a[href="MINTERS"]');
+  const minterBoardLinks = document.querySelectorAll('a[href="MINTER-BOARD"], a[href="MINTERS"]')
   minterBoardLinks.forEach(link => {
     link.addEventListener("click", async (event) => {
       event.preventDefault();
       if (!userState.isLoggedIn) {
-        await login();
+        await login()
       }
       if (typeof loadMinterBoardPage === "undefined") {
-        console.log("loadMinterBoardPage not found, loading script dynamically...");
-        await loadScript("./assets/js/MinterBoard.js");
+        console.log("loadMinterBoardPage not found, loading script dynamically...")
+        await loadScript("./assets/js/MinterBoard.js")
       }
-      await loadMinterBoardPage();
-    });
-  });
+      await loadMinterBoardPage()
+      createScrollToTopButton()
+    })
+  })
 
   // --- ADMIN CHECK ---
   await verifyUserIsAdmin();
@@ -115,74 +117,74 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   if (userState.isAdmin) {
-    console.log(`User is an Admin. Admin-specific buttons will remain visible.`);
+    console.log(`User is an Admin. Admin-specific buttons will remain visible.`)
 
     // DATA-BOARD Links for Admins
-    const minterDataBoardLinks = document.querySelectorAll('a[href="ADMINBOARD"]');
+    const minterDataBoardLinks = document.querySelectorAll('a[href="ADMINBOARD"]')
     minterDataBoardLinks.forEach(link => {
       link.addEventListener("click", async (event) => {
-        event.preventDefault();
+        event.preventDefault()
         if (!userState.isLoggedIn) {
-          await login();
+          await login()
         }
         if (typeof loadAdminBoardPage === "undefined") {
-          console.log("loadAdminBoardPage function not found, loading script dynamically...");
-          await loadScript("./assets/js/AdminBoard.js");
+          console.log("loadAdminBoardPage function not found, loading script dynamically...")
+          await loadScript("./assets/js/AdminBoard.js")
         }
-        await loadAdminBoardPage();
-      });
-    });
+        await loadAdminBoardPage()
+      })
+    })
 
     // TOOLS Links for Admins
-    const toolsLinks = document.querySelectorAll('a[href="TOOLS"]');
+    const toolsLinks = document.querySelectorAll('a[href="TOOLS"]')
     toolsLinks.forEach(link => {
       link.addEventListener('click', async (event) => {
-        event.preventDefault();
+        event.preventDefault()
         if (!userState.isLoggedIn) {
-          await login();
+          await login()
         }
         if (typeof loadMinterAdminToolsPage === "undefined") {
-          console.log("loadMinterAdminToolsPage function not found, loading script dynamically...");
-          await loadScript("./assets/js/AdminTools.js");
+          console.log("loadMinterAdminToolsPage function not found, loading script dynamically...")
+          await loadScript("./assets/js/AdminTools.js")
         }
-        await loadMinterAdminToolsPage();
-      });
-    });
+        await loadMinterAdminToolsPage()
+      })
+    })
 
   } else {
-    console.log("User is NOT an Admin. Removing admin-specific links.");
+    console.log("User is NOT an Admin. Removing admin-specific links.")
     
     // Remove all admin-specific links and their parents
-    const toolsLinks = document.querySelectorAll('a[href="TOOLS"], a[href="ADMINBOARD"]');
+    const toolsLinks = document.querySelectorAll('a[href="TOOLS"], a[href="ADMINBOARD"]')
     toolsLinks.forEach(link => {
-      const buttonParent = link.closest('button');
-      if (buttonParent) buttonParent.remove();
+      const buttonParent = link.closest('button')
+      if (buttonParent) buttonParent.remove()
 
-      const cardParent = link.closest('.item.features-image');
-      if (cardParent) cardParent.remove();
+      const cardParent = link.closest('.item.features-image')
+      if (cardParent) cardParent.remove()
 
-      link.remove();
-    });
+      link.remove()
+    })
 
     // Center the remaining card if it exists
-    const remainingCard = document.querySelector('.features7 .row .item.features-image');
+    const remainingCard = document.querySelector('.features7 .row .item.features-image')
     if (remainingCard) {
-      remainingCard.classList.remove('col-lg-6', 'col-md-6');
-      remainingCard.classList.add('col-12', 'text-center');
+      remainingCard.classList.remove('col-lg-6', 'col-md-6')
+      remainingCard.classList.add('col-12', 'text-center')
     }
   }
 
-  console.log("All DOMContentLoaded tasks completed.");
-});
+  console.log("All DOMContentLoaded tasks completed.")
+})
 
 async function loadScript(src) {
   return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = src;
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
+    const script = document.createElement("script")
+    script.src = src
+    script.onload = resolve
+    script.onerror = reject
+    document.head.appendChild(script)
+  })
 }
 
 
@@ -200,14 +202,14 @@ const loadForumPage = async () => {
     if ((typeof userState.isAdmin === 'undefined') || (!userState.isAdmin)){
       try {
         // Fetch and verify the admin status asynchronously
-        userState.isAdmin = await verifyUserIsAdmin();
+        userState.isAdmin = await verifyUserIsAdmin()
       } catch (error) {
-        console.error('Error verifying admin status:', error);
+        console.error('Error verifying admin status:', error)
         userState.isAdmin = false; // Default to non-admin if there's an issue
       }
     }
 
-  const avatarUrl = `/arbitrary/THUMBNAIL/${userState.accountName}/qortal_avatar`;
+  const avatarUrl = `/arbitrary/THUMBNAIL/${userState.accountName}/qortal_avatar`
   const isAdmin = userState.isAdmin;
   
   // Create the forum layout, including a header, sub-menu, and keeping the original background image: style="background-image: url('/assets/images/background.jpg');">
@@ -229,7 +231,7 @@ const loadForumPage = async () => {
       </div>
       <div id="forum-content" class="forum-content"></div>
     </div>
-  `;
+  `
 
   document.body.appendChild(mainContent);
 
@@ -252,61 +254,61 @@ const loadForumPage = async () => {
 
 // Function to add the pagination buttons and related control mechanisms ------------------------
 const renderPaginationControls = (room, totalMessages, limit) => {
-  const paginationContainer = document.getElementById("pagination-container");
-  if (!paginationContainer) return;
+  const paginationContainer = document.getElementById("pagination-container")
+  if (!paginationContainer) return
 
-  paginationContainer.innerHTML = ""; // Clear existing buttons
+  paginationContainer.innerHTML = "" // Clear existing buttons
 
-  const totalPages = Math.ceil(totalMessages / limit);
+  const totalPages = Math.ceil(totalMessages / limit)
 
   // Add "Previous" button
   if (currentPage > 0) {
-    const prevButton = document.createElement("button");
-    prevButton.innerText = "Previous";
+    const prevButton = document.createElement("button")
+    prevButton.innerText = "Previous"
     prevButton.addEventListener("click", () => {
       if (currentPage > 0) {
-        currentPage--;
-        loadMessagesFromQDN(room, currentPage, false);
+        currentPage--
+        loadMessagesFromQDN(room, currentPage, false)
       }
-    });
-    paginationContainer.appendChild(prevButton);
+    })
+    paginationContainer.appendChild(prevButton)
   }
 
   // Add numbered page buttons
   for (let i = 0; i < totalPages; i++) {
-    const pageButton = document.createElement("button");
-    pageButton.innerText = i + 1;
-    pageButton.className = i === currentPage ? "active-page" : "";
+    const pageButton = document.createElement("button")
+    pageButton.innerText = i + 1
+    pageButton.className = i === currentPage ? "active-page" : ""
     pageButton.addEventListener("click", () => {
       if (i !== currentPage) {
-        currentPage = i;
-        loadMessagesFromQDN(room, currentPage, false);
+        currentPage = i
+        loadMessagesFromQDN(room, currentPage, false)
       }
-    });
-    paginationContainer.appendChild(pageButton);
+    })
+    paginationContainer.appendChild(pageButton)
   }
 
   // Add "Next" button
   if (currentPage < totalPages - 1) {
-    const nextButton = document.createElement("button");
+    const nextButton = document.createElement("button")
     nextButton.innerText = "Next";
     nextButton.addEventListener("click", () => {
       if (currentPage < totalPages - 1) {
-        currentPage++;
+        currentPage++
         loadMessagesFromQDN(room, currentPage, false);
       }
-    });
-    paginationContainer.appendChild(nextButton);
+    })
+    paginationContainer.appendChild(nextButton)
   }
 }
 
 // Main function to load the full content of the room, along with all main functionality -----------------------------------
 const loadRoomContent = async (room) => {
-  const forumContent = document.getElementById("forum-content");
+  const forumContent = document.getElementById("forum-content")
 
   if (!forumContent) {
-    console.error("Forum content container not found!");
-    return;
+    console.error("Forum content container not found!")
+    return
   }
 
   if (userState.isAdmin) {
@@ -333,7 +335,7 @@ const loadRoomContent = async (room) => {
         <button id="send-button" class="send-button">Publish</button>
       </div>
     </div>
-  `;
+  `
 
   // Add modal for image preview
   forumContent.insertAdjacentHTML(
@@ -345,13 +347,13 @@ const loadRoomContent = async (room) => {
         <div id="caption" class="caption"></div>
         <button id="download-button" class="download-button">Download</button>
     </div>
-  `);
+  `)
 
-  initializeQuillEditor();
-  setupModalHandlers();
-  setupFileInputs(room);
+  initializeQuillEditor()
+  setupModalHandlers()
+  setupFileInputs(room)
   //TODO - maybe turn this into its own function and put it as a button? But for now it's fine to just load the latest message's position by default I think.
-  const latestId = latestMessageIdentifiers[room]?.latestIdentifier;
+  const latestId = latestMessageIdentifiers[room]?.latestIdentifier
   if (latestId) {
     const page = await findMessagePage(room, latestId, 10)
     currentPage = page;
@@ -360,8 +362,8 @@ const loadRoomContent = async (room) => {
   } else{
     await loadMessagesFromQDN(room, currentPage)
   }
-  ;
-};
+  
+}
 
 // Initialize Quill editor //TODO check the updated editor init code
 // const initializeQuillEditor = () => {
@@ -385,11 +387,11 @@ const loadRoomContent = async (room) => {
 
 
 const initializeQuillEditor = () => {
-  const editorContainer = document.querySelector('#editor');
+  const editorContainer = document.querySelector('#editor')
   
   if (!editorContainer) {
-    console.error("Editor container not found!");
-    return;
+    console.error("Editor container not found!")
+    return
   }
 
 new Quill('#editor', {
@@ -409,7 +411,7 @@ new Quill('#editor', {
         ['clean']
       ]
     }
-  });
+  })
 }
 
 
@@ -418,66 +420,66 @@ new Quill('#editor', {
 const setupModalHandlers = () => {
   document.addEventListener("click", (event) => {
     if (event.target.classList.contains("inline-image")) {
-      const modal = document.getElementById("image-modal");
-      const modalImage = document.getElementById("modal-image");
-      const caption = document.getElementById("caption");
+      const modal = document.getElementById("image-modal")
+      const modalImage = document.getElementById("modal-image")
+      const caption = document.getElementById("caption")
 
-      modalImage.src = event.target.src;
-      caption.textContent = event.target.alt;
-      modal.style.display = "block";
+      modalImage.src = event.target.src
+      caption.textContent = event.target.alt
+      modal.style.display = "block"
     }
-  });
+  })
 
   document.getElementById("close-modal").addEventListener("click", () => {
-    document.getElementById("image-modal").style.display = "none";
-  });
+    document.getElementById("image-modal").style.display = "none"
+  })
 
   window.addEventListener("click", (event) => {
-    const modal = document.getElementById("image-modal");
+    const modal = document.getElementById("image-modal")
     if (event.target === modal) {
-      modal.style.display = "none";
+      modal.style.display = "none"
     }
-  });
-};
+  })
+}
 
-let selectedImages = [];
-let selectedFiles = [];
-let multiResource = [];
-let attachmentIdentifiers = [];
+let selectedImages = []
+let selectedFiles = []
+let multiResource = []
+let attachmentIdentifiers = []
 
 // Set up file input handling
 const setupFileInputs = (room) => {
-  const imageFileInput = document.getElementById('image-input');
-  const previewContainer = document.getElementById('preview-container');
-  const addToPublishButton = document.getElementById('add-images-to-publish-button');
-  const fileInput = document.getElementById('file-input');
-  const sendButton = document.getElementById('send-button');
+  const imageFileInput = document.getElementById('image-input')
+  const previewContainer = document.getElementById('preview-container')
+  const addToPublishButton = document.getElementById('add-images-to-publish-button')
+  const fileInput = document.getElementById('file-input')
+  const sendButton = document.getElementById('send-button')
 
-  const attachmentID = generateAttachmentID(room);
+  const attachmentID = generateAttachmentID(room)
 
   imageFileInput.addEventListener('change', (event) => {
-    previewContainer.innerHTML = '';
-    selectedImages = [...event.target.files];
+    previewContainer.innerHTML = ''
+    selectedImages = [...event.target.files]
 
-    addToPublishButton.disabled = selectedImages.length === 0;
+    addToPublishButton.disabled = selectedImages.length === 0
 
     selectedImages.forEach((file, index) => {
-      const reader = new FileReader();
+      const reader = new FileReader()
       reader.onload = () => {
-        const img = document.createElement('img');
-        img.src = reader.result;
-        img.alt = file.name;
-        img.style = "width: 100px; height: 100px; object-fit: cover; border: 1px solid #ccc; border-radius: 5px;";
+        const img = document.createElement('img')
+        img.src = reader.result
+        img.alt = file.name
+        img.style = "width: 100px; height: 100px; object-fit: cover; border: 1px solid #ccc; border-radius: 5px;"
 
-        const removeButton = document.createElement('button');
-        removeButton.innerText = 'Remove';
-        removeButton.classList.add('remove-image-button');
+        const removeButton = document.createElement('button')
+        removeButton.innerText = 'Remove'
+        removeButton.classList.add('remove-image-button')
         removeButton.onclick = () => {
-          selectedImages.splice(index, 1);
-          img.remove();
-          removeButton.remove();
-          addToPublishButton.disabled = selectedImages.length === 0;
-        };
+          selectedImages.splice(index, 1)
+          img.remove()
+          removeButton.remove()
+          addToPublishButton.disabled = selectedImages.length === 0
+        }
 
         const container = document.createElement('div')
         container.style = "display: flex; flex-direction: column; align-items: center; margin: 5px;"
@@ -650,11 +652,11 @@ function clearInputs() {
 // Show success notification
 const showSuccessNotification = () => {
   const notification = document.createElement('div')
-  notification.innerText = "Message published successfully! Please wait for confirmation."
+  notification.innerText = "Successfully Published! Please note that messages will not display until after they are CONFIRMED, be patient!"
   notification.style.color = "green"
   notification.style.marginTop = "1em"
   document.querySelector(".message-input-section").appendChild(notification);
-  alert(`Successfully Published! Please note that messages will not display until after they are CONFIRMED, be patient!`)
+  // alert(`Successfully Published! Please note that messages will not display until after they are CONFIRMED, be patient!`)
 
   setTimeout(() => {
     notification.remove()
@@ -1073,11 +1075,14 @@ const buildSingleAttachmentHtml = async (attachment, room) => {
   } else if 
     (room === "admins" && attachment.mimeType && attachment.mimeType.startsWith('image/')) {
     // const imageUrl = `/arbitrary/${attachment.service}/${attachment.name}/${attachment.identifier}`;
-    const decryptedBase64 = await fetchEncryptedImageBase64(attachment.service, attachment.name, attachment.identifier, attachment.mimeType)
-    const dataUrl = `data:image/${attachment.mimeType};base64,${decryptedBase64}`
+    // const decryptedBase64 = await fetchEncryptedImageBase64(attachment.service, attachment.name, attachment.identifier, attachment.mimeType)
+    // const dataUrl = `data:image/${attachment.mimeType};base64,${decryptedBase64}`
+      //<img src="${dataUrl}" alt="${attachment.filename}" class="inline-image"/>
+      // above copied from removed html that is now created with fetchImageUrl TODO test this to ensure it works as expected.
+    const imageHtml = await loadInLineImageHtml(attachment.service, attachment.name, attachment.identifier, attachment.filename, attachment.mimeType, 'admins')
     return `
       <div class="attachment">
-        <img src="${dataUrl}" alt="${attachment.filename}" class="inline-image"/>
+        ${imageHtml}
         <button onclick="fetchAndSaveAttachment('${attachment.service}', '${attachment.name}', '${attachment.identifier}', '${attachment.filename}', '${attachment.mimeType}')">
           Save ${attachment.filename}
         </button>
@@ -1160,6 +1165,63 @@ const updatePaginationControls = async (room, limit) => {
   renderPaginationControls(room, totalMessages, limit)
 }
 
+const createScrollToTopButton = () => {
+  if (document.getElementById('scrollToTopButton')) return
+
+  const button = document.createElement('button')
+  button.id = 'scrollToTopButton'
+
+  button.innerHTML = '↑'
+
+  // Initial “not visible” state
+  button.style.display = 'none'
+
+  button.style.position = 'fixed'
+  button.style.bottom = '3vh'
+  button.style.right = '3vw'
+  button.style.width = '9vw'
+  button.style.height = '9vw'
+  button.style.minWidth = '45px'
+  button.style.minHeight = '45px'
+  button.style.maxWidth = '60px'
+  button.style.maxHeight = '60px'
+  button.style.borderRadius = '50%'
+  button.style.backgroundColor = 'black'
+  button.style.color = 'white'
+  button.style.border = '2px solid white'
+  button.style.boxShadow = '0 0 15px rgba(0,0,0,0.5)'
+  button.style.cursor = 'pointer'
+  button.style.zIndex = '1000'
+  button.style.transition = 'opacity 0.3s ease, transform 0.3s ease'
+  button.style.fontSize = '5vw'
+  button.style.minFontSize = '18px'
+  button.style.maxFontSize = '30px'
+
+  button.onclick = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  document.body.appendChild(button)
+
+  const adjustFontSize = () => {
+    const computedStyle = window.getComputedStyle(button)
+    let sizePx = parseFloat(computedStyle.fontSize)
+    if (sizePx < 18) sizePx = 18
+    if (sizePx > 30) sizePx = 30
+    button.style.fontSize = sizePx + 'px'
+  }
+  adjustFontSize()
+
+  window.addEventListener('resize', adjustFontSize)
+
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 200) {
+      button.style.display = 'block'
+    } else {
+      button.style.display = 'none'
+    }
+  })
+}
 
 
 // Polling function to check for new messages without clearing existing ones
