@@ -273,10 +273,10 @@ const loadCards = async () => {
         }
 
         const pollResults = await fetchPollResults(cardDataResponse.poll)
-        const BgColor = generateDarkPastelBackgroundBy(card.name)
+        const bgColor = generateDarkPastelBackgroundBy(card.name)
         const commentCount = await countComments(card.identifier)
         const cardUpdatedTime = card.updated || null
-        const finalCardHTML = await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, BgColor)
+        const finalCardHTML = await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, bgColor)
         
         replaceSkeleton(card.identifier, finalCardHTML)
       } catch (error) {
@@ -1000,30 +1000,46 @@ const handleInviteMinter = async (minterName) => {
   try {
     const blockInfo = await getLatestBlockInfo()
     const blockHeight = blockInfo.height
-    if (blockHeight <= MINTER_INVITE_BLOCK_HEIGHT) {
-      console.log(`block height is under the featureTrigger height`)
-    }
     const minterAccountInfo = await getNameInfo(minterName)
     const minterAddress = await minterAccountInfo.owner
-    const adminPublicKey = await getPublicKeyByName(userState.accountName)
-    console.log(`about to attempt group invite, minterAddress: ${minterAddress}, adminPublicKey: ${adminPublicKey}`)
-    const inviteTransaction = await createGroupInviteTransaction(minterAddress, adminPublicKey, 694, minterAddress, 864000, 0)
+    let adminPublicKey 
+    let txGroupId
+    if (blockHeight >= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT){
+      if (userState.isMinterAdmin){
+        adminPublicKey = await getPublicKeyByName(userState.accountName)
+        txGroupId = 694
+      }else{
+        console.warn(`user is not a minter admin, cannot create invite!`)
+        return
+      }
+    }else {
+      adminPublicKey = await getPublicKeyByName(userState.accountName)
+      txGroupId = 0
+    }
+    const fee = 0.01
+    const timeToLive = 864000
 
-    // Step 2: Sign the transaction using qortalRequest
+    console.log(`about to attempt group invite, minterAddress: ${minterAddress}, adminPublicKey: ${adminPublicKey}`)
+    const inviteTransaction = await createGroupInviteTransaction(minterAddress, adminPublicKey, 694, minterAddress, timeToLive, txGroupId, fee)
+    
     const signedTransaction = await qortalRequest({
         action: "SIGN_TRANSACTION",
         unsignedBytes: inviteTransaction
     })
 
-    // Step 3: Process the transaction
     console.warn(`signed transaction`,signedTransaction)
     const processResponse = await processTransaction(signedTransaction)
 
-    if (processResponse?.status === "OK") {
-        alert(`${minterName} has been successfully invited, please WAIT FOR CONFIRMATION...`)
+    if (typeof processResponse === 'object') {
+      // The successful object might have a "signature" or "type" or "approvalStatus"
+      console.log("Invite transaction success object:", processResponse)
+      alert(`${minterName} has been successfully invited! Wait for confirmation...Transaction Response: ${JSON.stringify(processResponse)}`)
     } else {
-        alert("Failed to process the invite transaction.")
+      // fallback string or something
+      console.log("Invite transaction raw text response:", processResponse)
+      alert(`Invite transaction response: ${JSON.stringify(processResponse)}`)
     }
+
   } catch (error) {
       console.error("Error inviting minter:", error)
       alert("Error inviting minter. Please try again.")
@@ -1047,14 +1063,183 @@ const createInviteButtonHtml = (creator, cardIdentifier) => {
 const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) => {
   const latestBlockInfo = await getLatestBlockInfo()
   const isBlockPassed = latestBlockInfo.height >= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT
+  let minAdminCount
+  const minterAdmins = await fetchMinterGroupAdmins() 
 
-  if (adminYes >= 9 && userState.isMinterAdmin && !isBlockPassed) {
+  if (!isBlockPassed){
+    console.warn(`feature trigger not passed, using static number for minAdminCount`)
+    minAdminCount = 9
+  }
+
+  if ((minterAdmins) && (minterAdmins.length === 1)){
+    console.warn(`simply a double-check that there is only one MINTER group admin, in which case the group hasn't been transferred to null...keeping default minAdminCount of: ${minAdminCount}`)
+  } else if ((minterAdmins) && (minterAdmins.length > 1) && isBlockPassed){
+    const totalAdmins = minterAdmins.length
+    const fortyPercent = totalAdmins * 0.40
+    minAdminCount = Math.round(fortyPercent)
+    console.warn(`this is another check to ensure minterAdmin group has more than 1 admin. IF so we will calculate the 40% needed for GROUP_APPROVAL, that number is: ${minAdminCount}`)
+  }
+
+  if (isBlockPassed) {
+    const minterAddressInfo = await getNameInfo(creator)
+    const minterAddress = await minterAddressInfo.owner
+    if (userState.isMinterAdmin){
+      let groupApprovalHtml = await checkGroupApprovalAndCreateButton(minterAddress, cardIdentifier, 'GROUP_INVITE')
+      if (groupApprovalHtml) {
+        return groupApprovalHtml
+      }
+    }else{
+      console.log(`USER NOT ADMIN, no need for group approval buttons...`)
+    }
+  }
+
+  if (adminYes >= minAdminCount && userState.isMinterAdmin) {
       const inviteButtonHtml = createInviteButtonHtml(creator, cardIdentifier)
       console.log(`admin votes over 9, creating invite button...`, adminYes)
     return inviteButtonHtml
   }
 
   return null
+}
+
+const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transactionType) => {
+  const txTypes = [`${transactionType}`]
+  const confirmationStatus = 'CONFIRMED'
+
+  const groupApprovalSearchResults = await searchTransactions(txTypes, address, confirmationStatus, limit, reverse, offset)
+  const pendingApprovals = groupApprovalSearchResults.filter(tx => tx.approvalStatus === 'PENDING')
+
+  if (pendingApprovals) {
+    console.warn(`pendingApprovals FOUND: ${pendingApprovals}`)
+  }
+
+  if (pendingApprovals.length === 0) {
+    return
+  }
+  const txSig = pendingApprovals[0].signature
+
+  if (transactionType === `GROUP_INVITE`){
+
+    const approvalButtonHtml = `
+    <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+      <button 
+          style="padding: 8px; background:rgb(37, 99, 44); color: #000; border: 1px solid #333; border-radius: 5px; cursor: pointer;"
+          onmouseover="this.style.backgroundColor='rgb(25, 47, 39) '"
+          onmouseout="this.style.backgroundColor='rgb(37, 99, 44) '"
+          onclick="handleGroupApproval('${address}','${txSig}')">
+        Approve Invite
+      </button>
+    </div>
+    `
+    return approvalButtonHtml
+  }
+
+  if (transactionType === `GROUP_KICK`){
+
+    const approvalButtonHtml = `
+    <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+      <button 
+          style="padding: 8px; background:rgb(119, 91, 21); color: #000; border: 1px solid #333; border-radius: 5px; cursor: pointer;"
+          onmouseover="this.style.backgroundColor='rgb(50, 52, 51) '"
+          onmouseout="this.style.backgroundColor='rgb(119, 91, 21) '"
+          onclick="handleGroupApproval('${address}','${txSig}')">
+        Approve Kick
+      </button>
+    </div>
+    `
+    return approvalButtonHtml
+  }
+
+  if (transactionType === `GROUP_BAN`){
+
+    const approvalButtonHtml = `
+    <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+      <button 
+          style="padding: 8px; background:rgb(54, 7, 7); color: #000; border: 1px solid #333; border-radius: 5px; cursor: pointer;"
+          onmouseover="this.style.backgroundColor='rgb(50, 52, 51) '"
+          onmouseout="this.style.backgroundColor='rgb(54, 7, 7) '"
+          onclick="handleGroupApproval('${address}','${txSig}')">
+        Approve Kick
+      </button>
+    </div>
+    `
+    return approvalButtonHtml
+  }
+}
+
+const handleGroupApproval = async (address, pendingApprovalSignature) => {
+  try{
+    if (!userState.isMinterAdmin) {
+      console.warn(`non-admin attempting to sign approval!`)
+      return
+    }
+    const fee = 0.01
+    const adminPublicKey = await getPublicKeyByName(userState.accountName)
+    const txGroupId = 694
+    const rawGroupApprovalTransaction = await createGroupApprovalTransaction(address, adminPublicKey, pendingApprovalSignature, txGroupId, fee)
+    const signedGroupApprovalTransaction = await qortalRequest({
+      action: "SIGN_TRANSACTION",
+      unsignedBytes: rawGroupApprovalTransaction
+    })
+    // const switchToBase58 = isBase64(signedGroupApprovalTransaction)
+    let txToProcess = signedGroupApprovalTransaction
+
+    // if (switchToBase58){
+    //   console.warn(`base64 tx found, converting to base58`,signedGroupApprovalTransaction)
+    //   const convertedToHex = await base64ToHex(signedGroupApprovalTransaction)
+    //   const base58TxData = await hexToBase58(convertedToHex)
+    //   txToProcess = base58TxData
+    //   console.log(`base58ConvertedSignedTxData to process:`,txToProcess)
+    // }
+    const processGroupApprovalTx = await processTransaction(txToProcess)
+
+    if (processGroupApprovalTx) {
+      alert(`transaction processed, please wait for CONFIRMATION: ${JSON.stringify(processGroupApprovalTx)}`)
+    } else {
+      alert(`creating tx failed for some reason`)
+    }
+    
+  }catch(error){
+    console.error(error)
+    throw error
+  }
+}
+
+const handleJoinGroup = async (minterAddress) => {
+  try{
+    if (userState.accountAddress === minterAddress) {
+      console.log(`minter user found `)
+      const joinerPublicKey = getPublicKeyFromAddress(minterAddress)
+      fee = 0.01
+      const joinGroupTransactionData = await createGroupJoinTransaction(minterAddress, joinerPublicKey, 694, 0, fee)
+      const signedJoinGroupTransaction = await qortalRequest({
+        action: "SIGN_TRANSACTION",
+        unsignedBytes: joinGroupTransactionData
+      })
+      let txToProcess = signedJoinGroupTransaction
+      // const switchToBase58 = isBase64(signedJoinGroupTransaction)
+
+      // if (switchToBase58){
+      //   console.warn(`base64 tx found, converting to base58`, signedJoinGroupTransaction)
+      //   const convertedToHex = await base64ToHex(signedJoinGroupTransaction)
+      //   const base58TxData = await hexToBase58(convertedToHex)
+      //   txToProcess = base58TxData
+      //   console.log(`base58ConvertedSignedTxData to process:`,txToProcess)
+      // }
+      const processJoinGroupTransaction = await processTransaction(txToProcess)
+
+      if (processJoinGroupTransaction){
+        console.warn(`processed JOIN_GROUP tx`,processJoinGroupTransaction)
+        alert(`JOIN GROUP Transaction Processed Successfully, please WAIT FOR CONFIRMATION txData: ${JSON.stringify(processJoinGroupTransaction)}`)
+      }
+      
+    } else {
+      console.warn(`user is not the minter`)
+      return ''
+    }
+  } catch(error){
+    throw error
+  }
 }
 
 const getMinterAvatar = async (minterName) => {
@@ -1076,7 +1261,7 @@ const getMinterAvatar = async (minterName) => {
 
 
 // Create the overall Minter Card HTML -----------------------------------------------
-const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, BgColor) => {
+const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, bgColor) => {
   const { header, content, links, creator, timestamp, poll } = cardData
   const formattedDate = cardUpdatedTime ? new Date(cardUpdatedTime).toLocaleString() : new Date(timestamp).toLocaleString()
   const avatarHtml = await getMinterAvatar(creator)
@@ -1093,14 +1278,48 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
   createModal('poll-details')
 
   const inviteButtonHtml = await checkAndDisplayInviteButton(adminYes, creator, cardIdentifier)
-  const inviteHtmlAdd = (inviteButtonHtml) ? inviteButtonHtml : ''
+  let inviteHtmlAdd = (inviteButtonHtml) ? inviteButtonHtml : ''
+
+  let finalBgColor = bgColor
+  let invitedText = "" // for "INVITED" label if found
+
+  try {
+    const minterAddress = await fetchOwnerAddressFromName(creator)
+    const invites = await fetchGroupInvitesByAddress(minterAddress)
+    const hasMinterInvite = invites.some((invite) => invite.groupId === 694)
+    if (hasMinterInvite) {
+      // If so, override background color & add an "INVITED" label
+      finalBgColor = "black"; 
+      invitedText = `<h4 style="color: gold; margin-bottom: 0.5em;">INVITED</h4>`
+      if (userState.accountName === creator){ //Check also if the creator is the user, and display the join group button if so.
+        inviteHtmlAdd = `
+          <div id="join-button-container-${cardIdentifier}" style="margin-top: 1em;">
+            <button 
+                style="padding: 8px; background:rgb(37, 99, 44); color: #000; border: 1px solid #333; border-radius: 5px; cursor: pointer;"
+                onmouseover="this.style.backgroundColor='rgb(25, 47, 39) '"
+                onmouseout="this.style.backgroundColor='rgb(37, 99, 44) '"
+                onclick="handleJoinGroup('${userState.accountAddress}')">
+              Approve Invite
+            </button>
+          </div>
+          `
+      }else{
+        console.log(`user is not the minter... displaying no join button`)
+        inviteHtmlAdd = ''
+      }
+    }
+       //do not display invite button as they're already invited. Create a join button instead.
+  } catch (error) {
+    console.error("Error checking invites for user:", error)
+  }
 
   return `
-  <div class="minter-card" style="background-color: ${BgColor}">
+  <div class="minter-card" style="background-color: ${finalBgColor}">
     <div class="minter-card-header">
       ${avatarHtml}
       <h3>${creator}</h3>
       <p>${header}</p>
+      ${invitedText}
     </div>
     <div class="support-header"><h5>USER'S POST</h5></div>
     <div class="info">

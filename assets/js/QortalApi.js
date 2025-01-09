@@ -28,6 +28,7 @@ const uid = async () => {
     console.log('Generated uid:', result)
     return result
 }
+
 // a non-async version of the uid function, in case non-async functions need it. Ultimately we can probably remove uid but need to ensure no apps are using it asynchronously first. so this is kept for that purpose for now.
 const randomID = () => {
     console.log('randomID non-async')
@@ -40,6 +41,7 @@ const randomID = () => {
     console.log('Generated uid:', result)
     return result
 }
+
 // Turn a unix timestamp into a human-readable date
 const timestampToHumanReadableDate = async(timestamp) => {
     const date = new Date(timestamp)
@@ -54,6 +56,72 @@ const timestampToHumanReadableDate = async(timestamp) => {
     console.log('Formatted date:', formattedDate)
     return formattedDate
 }
+
+// function to check if something is base58
+const isBase58 = (str) => {
+    if (typeof str !== 'string' || !str.length) return false
+    // Basic regex for typical Base58 alphabet:
+    // 1) No zero-like chars (0, O, I, l).
+    // 2) Should be [1-9A-HJ-NP-Za-km-z].
+    const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/
+    return base58Regex.test(str)
+}
+
+//function to check if something is base64
+const isBase64 = (str, attemptDecode = false) => {
+    if (typeof str !== 'string') return false
+  
+    // Basic length mod check for classic Base64
+    if (str.length % 4 !== 0) {
+      return false
+    }
+  
+    // Regex for valid Base64 chars + optional = padding
+    const base64Regex = /^[A-Za-z0-9+/]*(={1,2})?$/
+    if (!base64Regex.test(str)) {
+      return false
+    }
+  
+    if (attemptDecode) {
+      try {
+        // In browser, atob can throw if invalid
+        atob(str)
+      } catch {
+        return false
+      }
+    }
+  
+    return true
+}
+
+const base64ToHex = async (base64 = 'string') => {
+    try {
+        const response = await fetch (`${baseUrl}/utils/frombase64`, {
+            headers: { 'Accept': 'text/plain' },
+            method: 'GET',
+            body: base64
+        })
+        const hex = await response.text()
+        return hex
+    }catch(error){
+        throw error
+    }
+}
+
+const hexToBase58 = async (hex = 'string') => {
+    try {
+        const response = await fetch (`${baseUrl}/utils/tobase58`, {
+            headers: { 'Accept': 'text/plain' },
+            method: 'GET',
+            body: hex
+        })
+        const base58 = await response.text()
+        return base58
+    }catch(error){
+        throw error
+    }
+}
+  
 // Base64 encode a string
 const base64EncodeString = async (str) => {
     const encodedString = btoa(String.fromCharCode.apply(null, new Uint8Array(new TextEncoder().encode(str).buffer)))
@@ -260,9 +328,14 @@ const getNameInfo = async (name) => {
         if (!response.ok) {
             console.warn(`Failed to fetch name info for: ${name}, status: ${response.status}`)
             return null
-          }
+        }
 
         const data = await response.json()
+        if (!data.name) {
+            console.warn(`no name info returned, is this not a real registeredName? ${data.name} - returning null to bypass errors...`)
+            return null
+        }
+
         console.log('Fetched name info:', data)
         return {
             name: data.name,
@@ -514,6 +587,35 @@ const fetchAdminGroupsMembersPublicKeys = async () => {
     }
 }
 
+const fetchGroupInvitesByAddress = async (address) => {
+    try {
+      const response = await fetch(`${baseUrl}/groups/invites/${encodeURIComponent(address)}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      })
+  
+      if (!response.ok) {
+        // Not a 2xx status; read error details
+        const errorText = await response.text()
+        throw new Error(`Failed to fetch group invites: HTTP ${response.status}, ${errorText}`)
+      }
+  
+      // Attempt to parse the JSON response
+      const invites = await response.json()
+  
+      // Example check: ensures the result is an array
+      if (!Array.isArray(invites)) {
+        throw new Error('Group invites response is not an array as expected.')
+      }
+  
+      return invites // e.g. [{ groupId, inviter, invitee, expiry }, ...]
+    } catch (error) {
+      console.error('Error fetching address group invites:', error)
+      throw error
+    }
+  }
 
 // QDN data calls --------------------------------------------------------------------------------------------------
 const searchLatestDataByIdentifier = async (identifier) => {
@@ -1177,53 +1279,81 @@ const voteYesOnPoll = async (poll) => {
 
 // Qortal Transaction-related calls ---------------------------------------------------------------------------
 
-const processTransaction = async (rawTransaction) => {
+const processTransaction = async (signedTransaction) => {
     try {
-        const response = await fetch(`${baseUrl}/transactions/process`, {
-            method: 'POST',
-            headers: {
-                'Accept': 'text/plain',
-                'X-API-VERSION': '2',
-                'Content-Type': 'text/plain'
-            },
-            body: rawTransaction
-        })
-
-        if (!response.ok) throw new Error(`Transaction processing failed: ${response.status}`)
-        
-        const result = await response.text()
-        console.log("Transaction successfully processed:", result)
+      const response = await fetch(`${baseUrl}/transactions/process`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'text/plain', // or 'application/json' if the API states so
+          'X-API-VERSION': '2',   // version 2
+          'Content-Type': 'text/plain'
+        },
+        body: signedTransaction
+      })
+  
+      if (!response.ok) {
+        // On error, read the text so we can see the error details
+        const errorText = await response.text();
+        throw new Error(`Transaction processing failed: ${errorText}`)
+      }
+  
+      // Check the content type to see how to parse
+      const contentType = response.headers.get('Content-Type') || ''
+  
+      // If the core actually sets Content-Type: application/json
+      if (contentType.includes('application/json')) {
+        // We can do .json()
+        const result = await response.json();
+        console.log("Transaction processed, got JSON:", result);
         return result
+      } else {
+        // The core returns raw text that is actually JSON
+        const rawText = await response.text();
+        console.log("Raw text from server (version 2 means JSON string in text):", rawText)
+  
+        // Attempt to parse if it’s indeed JSON
+        let parsed;
+        try {
+          parsed = JSON.parse(rawText);
+        } catch {
+          // If it's not valid JSON, we can at least return the raw text
+          console.warn("Server returned non-JSON text (version 2 mismatch?).")
+          return rawText
+        }
+  
+        return parsed
+      }
     } catch (error) {
-        console.error("Error processing transaction:", error)
-        throw error
+      console.error("Error processing transaction:", error)
+      throw error
     }
-}
+  }
+  
 
 // Create a group invite transaction. This will utilize a default timeToLive (which is how long the tx will be alive, not the time until it IS live...) of 10 days in seconds, as the legacy UI has a bug that doesn't display invites older than 10 days.
 // We will also default to the MINTER group for groupId, AFTER the GROUP_APPROVAL changes, the txGroupId will need to be set for tx that require approval.
-const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, groupId=694, invitee, timeToLive = 864000, txGroupId = 0, fee=0.01) => {
+const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, groupId=694, invitee, timeToLive, txGroupId, fee) => {
 
     try {
         // Fetch account reference correctly
         const accountInfo = await getAddressInfo(recipientAddress)
         const accountReference = accountInfo.reference
-
+        
         // Validate inputs before making the request
-        if (!adminPublicKey || !accountReference || !recipientAddress) {
+        if (!adminPublicKey || !accountReference) {
             throw new Error("Missing required parameters for group invite transaction.")
         }
 
         const payload = {
             timestamp: Date.now(), 
             reference: accountReference, 
-            fee: fee || 0.01,
-            txGroupId: txGroupId, 
-            recipient: recipientAddress, 
-            adminPublicKey: adminPublicKey, 
-            groupId: groupId, 
+            fee,
+            txGroupId: txGroupId || 0, 
+            recipient: null, 
+            adminPublicKey, 
+            groupId, 
             invitee: invitee || recipientAddress, 
-            timeToLive: timeToLive
+            timeToLive
         }
 
         console.log("Sending group invite transaction payload:", payload)
@@ -1251,7 +1381,7 @@ const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, gr
     }
 }
 
-const createGroupKickTransaction = async (recipientAddress, adminPublicKey, groupId=694, member, reason='Kicked by admins', txGroupId = 0, fee=0.01) => {
+const createGroupKickTransaction = async (recipientAddress, adminPublicKey, groupId=694, member, reason='Kicked by admins', txGroupId, fee) => {
 
     try {
         // Fetch account reference correctly
@@ -1266,16 +1396,16 @@ const createGroupKickTransaction = async (recipientAddress, adminPublicKey, grou
         const payload = {
             timestamp: Date.now(), 
             reference: accountReference, 
-            fee: fee | 0.01,
-            txGroupId: txGroupId, 
-            recipient: recipientAddress, 
-            adminPublicKey: adminPublicKey, 
+            fee,
+            txGroupId, 
+            recipient: null, 
+            adminPublicKey, 
             groupId: groupId, 
             member: member || recipientAddress, 
             reason: reason
         }
 
-        console.log("Sending group invite transaction payload:", payload)
+        console.log("Sending GROUP_KICK transaction payload:", payload)
 
         const response = await fetch(`${baseUrl}/groups/kick`, {
             method: 'POST',
@@ -1295,12 +1425,109 @@ const createGroupKickTransaction = async (recipientAddress, adminPublicKey, grou
         console.log("Raw unsigned transaction created:", rawTransaction)
         return rawTransaction
     } catch (error) {
-        console.error("Error creating group invite transaction:", error)
+        console.error("Error creating GROUP_KICK transaction:", error)
         throw error
     }
 }
 
-const createGroupBanTransaction = async (recipientAddress, adminPublicKey, groupId=694, offender, reason='Banned by admins', txGroupId = 0, fee=0.01) => {
+const createGroupApprovalTransaction = async (recipientAddress, adminPublicKey, pendingApprovalSignature, txGroupId=694, fee=0.01) => {
+
+    try {
+        // Fetch account reference correctly
+        const accountInfo = await getAddressInfo(recipientAddress)
+        const accountReference = accountInfo.reference
+
+        // Validate inputs before making the request
+        if (!adminPublicKey || !accountReference || !recipientAddress) {
+            throw new Error("Missing required parameters for group invite transaction.")
+        }
+
+        const payload = {
+            timestamp: Date.now(), 
+            reference: accountReference, 
+            fee,
+            txGroupId,
+            recipient: null, 
+            adminPublicKey, 
+            pendingApprovalSignature, 
+            approval: true
+        }
+
+        console.log("Sending GROUP_APPROVAL transaction payload:", payload)
+
+        const response = await fetch(`${baseUrl}/groups/approval`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'text/plain',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+
+        if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`Failed to create transaction: ${response.status}, ${errorText}`)
+        }
+        
+        const rawTransaction = await response.text()
+        console.log("Raw unsigned transaction created:", rawTransaction)
+        return rawTransaction
+    } catch (error) {
+        console.error("Error creating GROUP_APPROVAL transaction:", error)
+        throw error
+    }
+}
+
+const createGroupBanTransaction = async (recipientAddress, adminPublicKey, groupId=694, offender, reason='Banned by admins', txGroupId, fee) => {
+
+    try {
+        // Fetch account reference correctly
+        const accountInfo = await getAddressInfo(recipientAddress)
+        const accountReference = accountInfo.reference
+
+        // Validate inputs before making the request
+        if (!adminPublicKey || !accountReference || !recipientAddress) {
+            throw new Error("Missing required parameters for group invite transaction.")
+        }
+
+        const payload = {
+            timestamp: Date.now(), 
+            reference: accountReference, 
+            fee,
+            txGroupId, 
+            recipient: null, 
+            adminPublicKey,
+            groupId, 
+            offender, 
+            reason,
+        }
+
+        console.log("Sending GROUP_BAN transaction payload:", payload)
+
+        const response = await fetch(`${baseUrl}/groups/ban`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'text/plain',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+
+        if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`Failed to create transaction: ${response.status}, ${errorText}`)
+        }
+        
+        const rawTransaction = await response.text()
+        console.log("Raw unsigned transaction created:", rawTransaction)
+        return rawTransaction
+    } catch (error) {
+        console.error("Error creating GROUP_BAN transaction:", error)
+        throw error
+    }
+}
+
+const createGroupJoinTransaction = async (recipientAddress, joinerPublicKey, groupId, txGroupId = 0, fee) => {
 
     try {
         // Fetch account reference correctly
@@ -1317,16 +1544,14 @@ const createGroupBanTransaction = async (recipientAddress, adminPublicKey, group
             reference: accountReference, 
             fee: fee | 0.01,
             txGroupId: txGroupId, 
-            recipient: recipientAddress, 
-            adminPublicKey: adminPublicKey, 
+            recipient: null, 
+            joinerPublicKey, 
             groupId: groupId, 
-            offender: offender || recipientAddress, 
-            reason: reason
         }
 
-        console.log("Sending group invite transaction payload:", payload)
+        console.log("Sending GROUP_JOIN transaction payload:", payload)
 
-        const response = await fetch(`${baseUrl}/groups/kick`, {
+        const response = await fetch(`${baseUrl}/groups/join`, {
             method: 'POST',
             headers: {
                 'Accept': 'text/plain',
@@ -1344,7 +1569,7 @@ const createGroupBanTransaction = async (recipientAddress, adminPublicKey, group
         console.log("Raw unsigned transaction created:", rawTransaction)
         return rawTransaction
     } catch (error) {
-        console.error("Error creating group invite transaction:", error)
+        console.error("Error creating GROUP_JOIN transaction:", error)
         throw error
     }
 }
@@ -1392,6 +1617,103 @@ const getLatestBlockInfo = async () => {
         return null
     }
 }
+// ALL QORTAL TRANSACTION TYPES BELOW
+
+// 'GENESIS','PAYMENT','REGISTER_NAME','UPDATE_NAME','SELL_NAME','CANCEL_SELL_NAME','BUY_NAME','CREATE_POLL',
+// 'VOTE_ON_POLL','ARBITRARY','ISSUE_ASSET','TRANSFER_ASSET','CREATE_ASSET_ORDER','CANCEL_ASSET_ORDER','MULTI_PAYMENT',
+// 'DEPLOY_AT','MESSAGE','CHAT','PUBLICIZE','AIRDROP','AT','CREATE_GROUP','UPDATE_GROUP','ADD_GROUP_ADMIN','REMOVE_GROUP_ADMIN',
+// 'GROUP_BAN','CANCEL_GROUP_BAN','GROUP_KICK','GROUP_INVITE','CANCEL_GROUP_INVITE','JOIN_GROUP','LEAVE_GROUP','GROUP_APPROVAL',
+// 'SET_GROUP','UPDATE_ASSET','ACCOUNT_FLAGS','ENABLE_FORGING','REWARD_SHARE','ACCOUNT_LEVEL','TRANSFER_PRIVS','PRESENCE'
+
+
+const searchTransactions = async ({
+    txTypes = [],
+    address,
+    confirmationStatus = 'CONFIRMED',
+    limit = 20,
+    reverse = true,
+    offset = 0,
+    startBlock = 0,
+    blockLimit = 0,
+    txGroupId = 0,
+  } = {}) => {
+    try {
+      // 1) Build the query string
+      const queryParams = [];
+  
+      // Add each txType as multiple "txType=..." params
+      txTypes.forEach(type => {
+        queryParams.push(`txType=${encodeURIComponent(type)}`);
+      });
+  
+      // If startBlock is nonzero, push "startBlock=..."
+      if (startBlock) {
+        queryParams.push(`startBlock=${encodeURIComponent(startBlock)}`);
+      }
+  
+      // If blockLimit is nonzero, push "blockLimit=..."
+      if (blockLimit) {
+        queryParams.push(`blockLimit=${encodeURIComponent(blockLimit)}`);
+      }
+  
+      // If txGroupId is nonzero, push "txGroupId=..."
+      if (txGroupId) {
+        queryParams.push(`txGroupId=${encodeURIComponent(txGroupId)}`);
+      }
+  
+      // Address
+      if (address) {
+        queryParams.push(`address=${encodeURIComponent(address)}`);
+      }
+      // Confirmation status
+      if (confirmationStatus) {
+        queryParams.push(`confirmationStatus=${encodeURIComponent(confirmationStatus)}`);
+      }
+      // Limit (if you want to explicitly pass limit=0, consider whether to skip or not)
+      if (limit !== undefined) {
+        queryParams.push(`limit=${limit}`);
+      }
+      // Reverse
+      if (reverse !== undefined) {
+        queryParams.push(`reverse=${reverse}`);
+      }
+      // Offset
+      if (offset) {
+        queryParams.push(`offset=${offset}`);
+      }
+  
+      const queryString = queryParams.join('&');
+      const url = `${baseUrl}/transactions/search?${queryString}`;
+  
+      // 2) Fetch
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': '*/*'
+        }
+      });
+  
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to search transactions: HTTP ${response.status}, ${errorText}`);
+      }
+  
+      // 3) Parse JSON
+      const txArray = await response.json();
+  
+      // Check if the response is indeed an array of transactions
+      if (!Array.isArray(txArray)) {
+        throw new Error("Expected an array of transactions, but got something else.");
+      }
+  
+      return txArray; // e.g. [{ type, timestamp, reference, ... }, ...]
+    } catch (error) {
+      console.error("Error in searchTransactions:", error);
+      throw error;
+    }
+  };
+  
+  
 
 
 

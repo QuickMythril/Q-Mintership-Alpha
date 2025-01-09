@@ -10,6 +10,8 @@ let isTopic = false
 let attemptLoadAdminDataCount = 0
 let adminMemberCount = 0
 let adminPublicKeys = []
+let kickTransactions = []
+let banTransactions = []
 
 console.log("Attempting to load AdminBoard.js")
 
@@ -104,9 +106,44 @@ const loadAdminBoardPage = async () => {
   })
   createScrollToTopButton()
   // await fetchAndValidateAllAdminCards()
-  await fetchAllEncryptedCards()
   await updateOrSaveAdminGroupsDataLocally()
+  await fetchAllKicKBanTxData()
+  await fetchAllEncryptedCards()  
 }
+
+const fetchAllKicKBanTxData = async () => {
+  const kickTxType = "GROUP_KICK"
+  const banTxType = "GROUP_BAN"
+  const banArray = [banTxType]
+  const kickArray = [kickTxType]
+
+  banTransactions = await searchTransactions({
+    txTypes: banArray,
+    address: '',                // or whatever address
+    confirmationStatus: 'CONFIRMED',
+    limit: 0,
+    reverse: true,
+    offset: 0,
+    startBlock: 1990000,
+    blockLimit: 0,
+    txGroupId: 0
+  });
+  console.warn(`banTxData`, banTransactions)
+
+  kickTransactions = await searchTransactions({
+    txTypes: kickArray,
+    address: '',
+    confirmationStatus: 'CONFIRMED',
+    limit: 0,
+    reverse: true,
+    offset: 0,
+    startBlock: 1990000,
+    blockLimit: 0,
+    txGroupId: 0
+  });
+  console.warn(`kickTxData`, kickTransactions)
+}
+
 
 // Example: fetch and save admin public keys and count
 const updateOrSaveAdminGroupsDataLocally = async () => {
@@ -177,154 +214,6 @@ const extractEncryptedCardsMinterName = (cardIdentifier) => {
   // Return the extracted minterName
   return minterName
 }
-
-// const processCards = async (validEncryptedCards) => {
-//   const latestCardsMap = new Map()
-
-//   await Promise.all(validEncryptedCards.map(async card => {
-//     const timestamp = card.updated || card.created || 0
-//     const existingCard = latestCardsMap.get(card.identifier)
-
-//     if (!existingCard || timestamp > (existingCard.updated || existingCard.created || 0)) {
-//       latestCardsMap.set(card.identifier, card)
-//     }
-//   }))
-
-//   console.log(`latestCardsMap, by timestamp`, latestCardsMap)
-
-//   const uniqueValidCards = Array.from(latestCardsMap.values())
-
-//   return uniqueValidCards
-// }
-
-
-//Main function to load the Minter Cards ----------------------------------------
-//TODO verify the latest changes work
-// const fetchAllEncryptedCards = async (isRefresh=false) => {
-//   const encryptedCardsContainer = document.getElementById("encrypted-cards-container")
-//   encryptedCardsContainer.innerHTML = "<p>Loading cards...</p>"
-
-//   try {
-//     const response = await searchSimple('MAIL_PRIVATE', `${encryptedCardIdentifierPrefix}`, '', 0)
-
-//     if (!response || !Array.isArray(response) || response.length === 0) {
-//       encryptedCardsContainer.innerHTML = "<p>No cards found.</p>"
-//       return
-//     }
-
-//     // Validate cards and filter
-//     const validatedEncryptedCards = await Promise.all(
-//       response.map(async card => {
-//         const isValid = await validateEncryptedCardIdentifier(card)
-//         return isValid ? card : null
-//       })
-//     )
-//     console.log(`validatedEncryptedCards:`, validatedEncryptedCards, `... running next filter...`)
-
-//     const validEncryptedCards = validatedEncryptedCards.filter(card => card !== null)
-//     console.log(`validEncryptedcards:`, validEncryptedCards)
-    
-//     if (validEncryptedCards.length === 0) {
-//       encryptedCardsContainer.innerHTML = "<p>No valid cards found.</p>";
-//       return;
-//     }
-//     const finalCards = await processCards(validEncryptedCards)
-    
-//     console.log(`finalCards:`,finalCards)
-//     // Display skeleton cards immediately
-//     encryptedCardsContainer.innerHTML = ""
-//     finalCards.forEach(card => {
-//       const skeletonHTML = createSkeletonCardHTML(card.identifier)
-//       encryptedCardsContainer.insertAdjacentHTML("beforeend", skeletonHTML)
-//     })
-
-//     // Fetch and update each card
-//     finalCards.forEach(async card => {
-//       try {
-//         // const hasMinterName = await extractEncryptedCardsMinterName(card.identifier)
-//         // if (hasMinterName) existingCardMinterNames.push(hasMinterName)
-
-//         const cardDataResponse = await qortalRequest({
-//           action: "FETCH_QDN_RESOURCE",
-//           name: card.name,
-//           service: "MAIL_PRIVATE",
-//           identifier: card.identifier,
-//           encoding: "base64"
-//         })
-
-//         if (!cardDataResponse) {
-//           console.warn(`Skipping invalid card: ${JSON.stringify(card)}`)
-//           removeSkeleton(card.identifier)
-//           return
-//         }
-
-//         const decryptedCardData = await decryptAndParseObject(cardDataResponse)
-
-//         // Skip cards without polls
-//         if (!decryptedCardData.poll) {
-//           console.warn(`Skipping card with no poll: ${card.identifier}`)
-//           removeSkeleton(card.identifier)
-//           return
-//         }
-        
-//         const encryptedCardPollPublisherPublicKey = await getPollPublisherPublicKey(decryptedCardData.poll)
-//         const encryptedCardPublisherPublicKey = await getPublicKeyByName(card.name)
-
-//         if (encryptedCardPollPublisherPublicKey != encryptedCardPublisherPublicKey) {
-//           console.warn(`QuickMythril cardPollHijack attack found! Not including card with identifier: ${card.identifier}`)
-//           removeSkeleton(card.identifier)
-//           return
-//         }
-
-//         // Fetch poll results and discard cards with no results
-//         const pollResults = await fetchPollResults(decryptedCardData.poll)
-
-//         if (pollResults?.error) {
-//           console.warn(`Skipping card with failed poll results?: ${card.identifier}, poll=${decryptedCardData.poll}`)
-//           removeSkeleton(card.identifier)
-//           return
-//         }
-
-//         if (!isRefresh) {
-//           console.log(`This is a REFRESH, NOT adding names to duplicates list...`)
-//           const obtainedMinterName = decryptedCardData.minterName
-
-//           // if ((obtainedMinterName) && existingCardMinterNames.includes(obtainedMinterName)) {
-//           //   console.warn(`name found in existing names array...${obtainedMinterName} skipping duplicate card...${card.identifier}`)
-//           //   removeSkeleton(card.identifier)
-//           //   return
-//           // } else if ((obtainedMinterName) && (!existingCardMinterNames.includes(obtainedMinterName))) {
-//           //   existingCardMinterNames.push(obtainedMinterName)
-//           //   console.log(`minterName: ${obtainedMinterName} found, doesn't exist in existing array, added to existingCardMinterNames array`)
-//           // } 
-
-//           if (obtainedMinterName && existingCardMinterNames.some(item => item.minterName === obtainedMinterName)) {
-//             console.warn(`name found in existing names array...${obtainedMinterName} skipping duplicate card...${card.identifier}`)
-//             removeSkeleton(card.identifier)
-//             return
-//           } else if (obtainedMinterName) {
-//             existingCardMinterNames.push({ minterName: obtainedMinterName, identifier: card.identifier })
-//             console.log(`Added minterName and identifier to existingCardMinterNames array:`, { minterName: obtainedMinterName, identifier: card.identifier })
-//           }
-//         }
-        
-//         // const minterNameFromIdentifier = await extractCardsMinterName(card.identifier);
-//         const encryptedCommentCount = await getEncryptedCommentCount(card.identifier)
-//         // Generate final card HTML
-        
-//         const finalCardHTML = await createEncryptedCardHTML(decryptedCardData, pollResults, card.identifier, encryptedCommentCount)
-//         replaceSkeleton(card.identifier, finalCardHTML)
-//       } catch (error) {
-//         console.error(`Error processing card ${card.identifier}:`, error)
-//         removeSkeleton(card.identifier)
-//       }
-//     })
-
-//   } catch (error) {
-//     console.error("Error loading cards:", error)
-//     encryptedCardsContainer.innerHTML = "<p>Failed to load cards.</p>"
-//   }
-// }
 
 const fetchAllEncryptedCards = async (isRefresh = false) => {
   const encryptedCardsContainer = document.getElementById("encrypted-cards-container")
@@ -478,22 +367,6 @@ const fetchAllEncryptedCards = async (isRefresh = false) => {
     encryptedCardsContainer.innerHTML = "<p>Failed to load cards.</p>"
   }
 }
-
-
-//TODO verify that this actually isn't necessary. if not, remove it.
-// const removeEncryptedSkeleton = (cardIdentifier) => {
-//   const encryptedSkeletonCard = document.getElementById(`skeleton-${cardIdentifier}`)
-//   if (encryptedSkeletonCard) {
-//     encryptedSkeletonCard.remove(); // Remove the skeleton silently
-//   }
-// }
-
-// const replaceEncryptedSkeleton = (cardIdentifier, htmlContent) => {
-//   const encryptedSkeletonCard = document.getElementById(`skeleton-${cardIdentifier}`)
-//   if (encryptedSkeletonCard) {
-//     encryptedSkeletonCard.outerHTML = htmlContent;
-//   }
-// }
 
 // Function to create a skeleton card
 const createEncryptedSkeletonCardHTML = (cardIdentifier) => {
@@ -911,28 +784,44 @@ const processQortalLinkForRendering = async (link) => {
   return link
 }
 
-const checkAndDisplayRemoveActions = async (adminYes, creator, cardIdentifier) => {
+const checkAndDisplayRemoveActions = async (adminYes, name, cardIdentifier) => {
   const latestBlockInfo = await getLatestBlockInfo()
   const isBlockPassed = latestBlockInfo.height >= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT 
-  let minAdminCount = 9
+  let minAdminCount 
   const minterAdmins = await fetchMinterGroupAdmins()
 
   if ((minterAdmins) && (minterAdmins.length === 1)){
     console.warn(`simply a double-check that there is only one MINTER group admin, in which case the group hasn't been transferred to null...keeping default minAdminCount of: ${minAdminCount}`)
-
+    minAdminCount = 9
   } else if ((minterAdmins) && (minterAdmins.length > 1) && isBlockPassed){
     const totalAdmins = minterAdmins.length
     const fortyPercent = totalAdmins * 0.40
     minAdminCount = Math.round(fortyPercent)
     console.warn(`this is another check to ensure minterAdmin group has more than 1 admin. IF so we will calculate the 40% needed for GROUP_APPROVAL, that number is: ${minAdminCount}`)
   }
-  //TODO verify the above functionality to calculate 40% of MINTER group admins, and use that for minAdminCount
-  
-  if (adminYes >= minAdminCount && userState.isMinterAdmin && !isBlockPassed) {
-    const removeButtonHtml = createRemoveButtonHtml(creator, cardIdentifier)
-    return removeButtonHtml
+  if (isBlockPassed && userState.isMinterAdmin) {
+    console.warn(`feature trigger has passed, checking for approval requirements`)
+    const addressInfo = await getNameInfo(name)
+    const address = addressInfo.owner
+    const kickApprovalHtml = await checkGroupApprovalAndCreateButton(address, cardIdentifier, "GROUP_KICK")
+    const banApprovalHtml = await checkGroupApprovalAndCreateButton(address, cardIdentifier, "GROUP_BAN")
+    
+    if (kickApprovalHtml) {
+      return kickApprovalHtml
+    }
+
+    if (banApprovalHtml) {
+      return banApprovalHtml
+    }
   }
-  return ''
+  
+  if (adminYes >= minAdminCount && userState.isMinterAdmin) {
+    const removeButtonHtml = createRemoveButtonHtml(name, cardIdentifier)
+    return removeButtonHtml
+  } else{
+    return ''
+  }
+  
 }
 
 const createRemoveButtonHtml = (name, cardIdentifier) => {
@@ -957,9 +846,12 @@ const createRemoveButtonHtml = (name, cardIdentifier) => {
 const handleKickMinter = async (minterName) => {
   try {
     // Optional block check
+    let txGroupId = 0
     const { height: currentHeight } = await getLatestBlockInfo()
-    if (currentHeight <= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT) {
-      console.log(`block height is under the removal featureTrigger height`)
+    const isBlockPassed = currentHeight >= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT
+    if (isBlockPassed) {
+      console.log(`block height above featureTrigger Height, using group approval method...txGroupId 694`)
+      txGroupId = 694
     }
 
     // Get the minter address from name info
@@ -970,68 +862,82 @@ const handleKickMinter = async (minterName) => {
       return
     }
 
-    // The admin public key
     const adminPublicKey = await getPublicKeyByName(userState.accountName)
+    const reason = 'Kicked by Minter Admins'
+    const fee = 0.01
 
-    // Create the raw remove transaction
-    const rawKickTransaction = await createGroupKickTransaction(minterAddress, adminPublicKey, 694, minterAddress)
+    const rawKickTransaction = await createGroupKickTransaction(minterAddress, adminPublicKey, 694, minterAddress, reason, txGroupId, fee)
 
-    // Sign the transaction
     const signedKickTransaction = await qortalRequest({
       action: "SIGN_TRANSACTION",
       unsignedBytes: rawKickTransaction
     })
+    
+    let txToProcess = signedKickTransaction
 
-    // Process the transaction
-    const processResponse = await processTransaction(signedKickTransaction)
+    const processKickTx = await processTransaction(txToProcess)
 
-    if (processResponse?.status === "OK") {
-      alert(`${minterName}'s KICK transaction has been SUCCESSFULLY PROCESSED. Please WAIT FOR CONFIRMATION...`)
+    if (typeof processKickTx === 'object') {
+      console.log("transaction success object:", processKickTx)
+      alert(`${minterName} kick successfully issued! Wait for confirmation...Transaction Response: ${JSON.stringify(processKickTx)}`)
     } else {
-      alert("Failed to process the removal transaction.")
+      console.log("transaction raw text response:", processKickTx)
+      alert(`TxResponse: ${JSON.stringify(processKickTx)}`)
     }
 
   } catch (error) {
     console.error("Error removing minter:", error)
-    alert("Error removing minter. Please try again.")
+    alert(`Error:${error}. Please try again.`)
   }
 }
 
 const handleBanMinter = async (minterName) => {
   try {
-    
+    let txGroupId = 0
     const { height: currentHeight } = await getLatestBlockInfo()
     if (currentHeight <= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT) {
-      console.log(`block height is under the removal featureTrigger height`)
+      console.log(`block height is under the removal featureTrigger height, using txGroupId 0`)
+      txGroupId = 0
+    } else {
+      console.log(`featureTrigger block is passed, using txGroupId 694`)
+      txGroupId = 694
     }
 
     const minterInfo = await getNameInfo(minterName)
     const minterAddress = minterInfo?.owner
+
     if (!minterAddress) {
       alert(`No valid address found for minter name: ${minterName}`)
       return
     }
 
     const adminPublicKey = await getPublicKeyByName(userState.accountName)
+    const reason = 'Banned by Minter Admins'
+    const fee = 0.01 
 
-    const rawBanTransaction = await createGroupBanTransaction(minterAddress, adminPublicKey, 694, minterAddress)
+    const rawBanTransaction = await createGroupBanTransaction(minterAddress, adminPublicKey, 694, minterAddress, reason, txGroupId, fee)
 
     const signedBanTransaction = await qortalRequest({
       action: "SIGN_TRANSACTION",
       unsignedBytes: rawBanTransaction
     })
 
-    const processResponse = await processTransaction(signedBanTransaction)
+    let txToProcess = signedBanTransaction
 
-    if (processResponse?.status === "OK") {
-      alert(`${minterName}'s BAN transaction has been SUCCESSFULLY PROCESSED. Please WAIT FOR CONFIRMATION...`)
+    const processedTx = await processTransaction(txToProcess)
+
+    if (typeof processedTx === 'object') {
+      console.log("transaction success object:", processedTx)
+      alert(`${minterName} BAN successfully issued! Wait for confirmation...Transaction Response: ${JSON.stringify(processedTx)}`)
     } else {
-      alert("Failed to process the removal transaction.")
+      // fallback string or something
+      console.log("transaction raw text response:", processedTx)
+      alert(`transaction response:${JSON.stringify(processedTx)}` )
     }
 
   } catch (error) {
     console.error("Error removing minter:", error)
-    alert("Error removing minter. Please try again.")
+    alert(`Error ${error}. Please try again.`)
   }
 }
 
@@ -1062,7 +968,7 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
     }
   }
  
-  const cardColorCode = showTopic ? '#0e1b15' : '#151f28'
+  let cardColorCode = showTopic ? '#0e1b15' : '#151f28'
 
   const minterOrTopicHtml = ((showTopic) || (isUndefinedUser)) ? `
     <div class="support-header"><h5> REGARDING (Topic): </h5></div>
@@ -1080,11 +986,30 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
   createModal('poll-details')
 
   let showRemoveHtml
+  let altText
   const verifiedName = await validateMinterName(minterName)
+
   if (verifiedName) {
+    const accountInfo = await getNameInfo(verifiedName)
+    const accountAddress = accountInfo.owner
     console.log(`name is validated, utilizing for removal features...${verifiedName}`)
     const removeActionsHtml = await checkAndDisplayRemoveActions(adminYes, verifiedName, cardIdentifier)
     showRemoveHtml = removeActionsHtml
+    
+    if (banTransactions.some((banTx) => banTx.groupId === 694 && banTx.offender === accountAddress)){
+      console.warn(`account was already banned, displaying as such...`)
+      cardColorCode = 'rgb(24, 3, 3)'
+      altText  = `<h4 style="color:rgb(106, 2, 2); margin-bottom: 0.5em;">BANNED From MINTER Group</h4>`
+      showRemoveHtml = ''
+    }
+    
+    if (kickTransactions.some((kickTx) => kickTx.groupId === 694 && kickTx.member === accountAddress)){
+      console.warn(`account was already kicked, displaying as such...`)
+      cardColorCode = 'rgb(29, 7, 4)'
+      altText  = `<h4 style="color:rgb(143, 117, 21); margin-bottom: 0.5em;">KICKED From MINTER Group</h4>`
+      showRemoveHtml = ''
+    }
+    
   } else {
     console.log(`name could not be validated, assuming topic card (or some other issue with name validation) for removalActions`)
     showRemoveHtml = ''
@@ -1098,6 +1023,7 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
       <h2>${creator}</h2>
       ${minterOrTopicHtml}
       <p>${header}</p>
+      ${altText}
     </div>
     <div class="info">
       ${content}
