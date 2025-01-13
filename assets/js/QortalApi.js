@@ -267,34 +267,34 @@ const verifyUserIsAdmin = async () => {
         console.log('userGroups:', userGroups)
         
         const minterGroupAdmins = await fetchMinterGroupAdmins()
-        console.log('minterGroupAdmins.members:', minterGroupAdmins)
+        console.log('minterGroupAdmins:', minterGroupAdmins)
         
         if (!Array.isArray(userGroups)) {
             throw new Error('userGroups is not an array or is undefined')
         }
         
         if (!Array.isArray(minterGroupAdmins)) {
-            throw new Error('minterGroupAdmins.members is not an array or is undefined')
+            throw new Error('minterGroupAdmins is not an array or is undefined')
         }
         
         const isAdmin = userGroups.some(group => adminGroups.includes(group.groupName))
         const isMinterAdmin = minterGroupAdmins.some(admin => admin.member === userState.accountAddress && admin.isAdmin)
         
-        if (isMinterAdmin) {
-            userState.isMinterAdmin = true
+        userState.isMinterAdmin = isMinterAdmin
+        userState.isAdmin = isMinterAdmin || isAdmin
+        userState.isForumAdmin = isAdmin
+
+        if ((userState.isAdmin) || (userState.isMinterAdmin || userState.isForumAdmin)){
+            console.log(`user is one of the following: admin: ${userState.isAdmin} - minterAdmin: ${userState.isMinterAdmin} - forumAdmin: ${userState.isForumAdmin}`)
+            return userState.isAdmin
+        } else {
+        return false
         }
-        if (isAdmin) {
-            userState.isAdmin = true
-            userState.isForumAdmin = true
-        }
-        return userState.isAdmin
     } catch (error) {
         console.error('Error verifying user admin status:', error)
         throw error
     }
 }
-
-
 
 const verifyAddressIsAdmin = async (address) => {
     console.log('verifyAddressIsAdmin called')
@@ -307,7 +307,7 @@ const verifyAddressIsAdmin = async (address) => {
         const userGroups = await getUserGroups(address)
         const minterGroupAdmins = await fetchMinterGroupAdmins()
         const isAdmin = await userGroups.some(group => adminGroups.includes(group.groupName))
-        const isMinterAdmin = minterGroupAdmins.members.some(admin => admin.member === address && admin.isAdmin)
+        const isMinterAdmin = minterGroupAdmins.some(admin => admin.member === address && admin.isAdmin)
         if ((isMinterAdmin) || (isAdmin)) {
             return true
           } else {
@@ -483,27 +483,61 @@ const fetchMinterGroupAdmins = async () => {
     //use what is returned .member to obtain each member... {"member": "memberAddress", "isAdmin": "true"}
 }
 
-const fetchAllAdminGroupsMembers = async () => {
-    try  {
-        let adminGroupMemberAddresses = [] // Declare outside loop to accumulate results
-        for (const groupID of adminGroupIDs) {
-            const response = await fetch(`${baseUrl}/groups/members/${groupID}?limit=0`, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-            })
+// const fetchAllAdminGroupsMembers = async () => {
+//     try  {
+//         let adminGroupMemberAddresses = [] // Declare outside loop to accumulate results
+//         for (const groupID of adminGroupIDs) {
+//             const response = await fetch(`${baseUrl}/groups/members/${groupID}?limit=0`, {
+//                 method: 'GET',
+//                 headers: { 'Accept': 'application/json' },
+//             })
 
-            const groupData = await response.json() 
-            if (groupData.members && Array.isArray(groupData.members)) {
-                adminGroupMemberAddresses.push(...groupData.members) // Merge members into the array
-            } else {
-                console.warn(`Group ${groupID} did not return valid members.`)
+//             const groupData = await response.json() 
+//             if (groupData.members && Array.isArray(groupData.members)) {
+//                 adminGroupMemberAddresses.push(...groupData.members) // Merge members into the array
+//             } else {
+//                 console.warn(`Group ${groupID} did not return valid members.`)
+//             }
+//         }
+//         return adminGroupMemberAddresses
+//     } catch (error) {
+//         console.log('Error fetching admin group members', error)
+//     }
+// }
+
+const fetchAllAdminGroupsMembers = async () => {
+    try {
+      // We'll track addresses so we don't duplicate the same .member
+      const seenAddresses = new Set()
+      const resultObjects = []
+  
+      for (const groupID of adminGroupIDs) {
+        const response = await fetch(`${baseUrl}/groups/members/${groupID}?limit=0`, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+        })
+  
+        const groupData = await response.json()
+        if (Array.isArray(groupData?.members)) {
+          for (const memberObj of groupData.members) {
+            if (memberObj?.member && !seenAddresses.has(memberObj.member)) {
+              // Add to final results
+              resultObjects.push(memberObj)
+              // Mark address as seen
+              seenAddresses.add(memberObj.member)
             }
+          }
+        } else {
+          console.warn(`Group ${groupID} did not return valid members.`)
         }
-        return adminGroupMemberAddresses
+      }
+  
+      return resultObjects // array of objects e.g. [{member, joined}, ...]
     } catch (error) {
-        console.log('Error fetching admin group members', error)
+      console.error('Error fetching admin group members', error)
+      return []
     }
-}
+  }
 
 const fetchMinterGroupMembers = async () => {
     try {
@@ -548,27 +582,21 @@ const fetchAllGroups = async (limit) => {
 
 const fetchAdminGroupsMembersPublicKeys = async () => {
     try {
-        let adminGroupMemberAddresses = [] // Declare outside loop to accumulate results
-        for (const groupID of adminGroupIDs) {
-            const response = await fetch(`${baseUrl}/groups/members/${groupID}?limit=0`, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-            })
 
-            const groupData = await response.json() 
-            if (groupData.members && Array.isArray(groupData.members)) {
-                adminGroupMemberAddresses.push(...groupData.members) // Merge members into the array
-            } else {
-                console.warn(`Group ${groupID} did not return valid members.`)
-            }
-        }
+        let adminGroupMemberAddresses = await fetchAllAdminGroupsMembers()
+        let minterAdminMemberAddresses = await fetchMinterGroupAdmins()
 
-        // Check if adminGroupMemberAddresses has valid data
         if (!Array.isArray(adminGroupMemberAddresses)) {
             throw new Error("Expected 'adminGroupMemberAddresses' to be an array but got a different structure")
         }
 
-        let allMemberPublicKeys = [] // Declare outside loop to accumulate results
+        if (Array.isArray(adminGroupMemberAddresses)) {
+            console.log(`adding + minterAdminMemberAddresses:`, minterAdminMemberAddresses)
+            adminGroupMemberAddresses.push(...minterAdminMemberAddresses)
+            console.log(`final = all adminGroupMemberAddresses`, adminGroupMemberAddresses)
+        }
+
+        let allMemberPublicKeys = []
         for (const member of adminGroupMemberAddresses) {
             const memberPublicKey = await getPublicKeyFromAddress(member.member)
             allMemberPublicKeys.push(memberPublicKey)
@@ -1430,15 +1458,16 @@ const createGroupKickTransaction = async (recipientAddress, adminPublicKey, grou
     }
 }
 
-const createGroupApprovalTransaction = async (recipientAddress, adminPublicKey, pendingApprovalSignature, txGroupId=694, fee=0.01) => {
+const createGroupApprovalTransaction = async (adminPublicKey, pendingSignature, txGroupId=0, fee=0.01) => {
 
     try {
         // Fetch account reference correctly
-        const accountInfo = await getAddressInfo(recipientAddress)
-        const accountReference = accountInfo.reference
+        const adminAddress = await getAddressFromPublicKey(adminPublicKey)
+        const addressInfo = await getAddressInfo(adminAddress)
+        const accountReference = addressInfo.reference
 
         // Validate inputs before making the request
-        if (!adminPublicKey || !accountReference || !recipientAddress) {
+        if (!adminPublicKey || !accountReference ) {
             throw new Error("Missing required parameters for group invite transaction.")
         }
 
@@ -1447,9 +1476,8 @@ const createGroupApprovalTransaction = async (recipientAddress, adminPublicKey, 
             reference: accountReference, 
             fee,
             txGroupId,
-            recipient: null, 
             adminPublicKey, 
-            pendingApprovalSignature, 
+            pendingSignature, 
             approval: true
         }
 
@@ -1494,8 +1522,7 @@ const createGroupBanTransaction = async (recipientAddress, adminPublicKey, group
             timestamp: Date.now(), 
             reference: accountReference, 
             fee,
-            txGroupId, 
-            recipient: null, 
+            txGroupId,  
             adminPublicKey,
             groupId, 
             offender, 
@@ -1535,18 +1562,17 @@ const createGroupJoinTransaction = async (recipientAddress, joinerPublicKey, gro
         const accountReference = accountInfo.reference
 
         // Validate inputs before making the request
-        if (!adminPublicKey || !accountReference || !recipientAddress) {
+        if (!accountReference || !recipientAddress) {
             throw new Error("Missing required parameters for group invite transaction.")
         }
 
         const payload = {
             timestamp: Date.now(), 
             reference: accountReference, 
-            fee: fee | 0.01,
-            txGroupId: txGroupId, 
-            recipient: null, 
+            fee: fee,
+            txGroupId,
             joinerPublicKey, 
-            groupId: groupId, 
+            groupId
         }
 
         console.log("Sending GROUP_JOIN transaction payload:", payload)
@@ -1639,35 +1665,35 @@ const searchTransactions = async ({
   } = {}) => {
     try {
       // 1) Build the query string
-      const queryParams = [];
+      const queryParams = []
   
       // Add each txType as multiple "txType=..." params
       txTypes.forEach(type => {
-        queryParams.push(`txType=${encodeURIComponent(type)}`);
-      });
+        queryParams.push(`txType=${encodeURIComponent(type)}`)
+      })
   
       // If startBlock is nonzero, push "startBlock=..."
       if (startBlock) {
-        queryParams.push(`startBlock=${encodeURIComponent(startBlock)}`);
+        queryParams.push(`startBlock=${encodeURIComponent(startBlock)}`)
       }
   
       // If blockLimit is nonzero, push "blockLimit=..."
       if (blockLimit) {
-        queryParams.push(`blockLimit=${encodeURIComponent(blockLimit)}`);
+        queryParams.push(`blockLimit=${encodeURIComponent(blockLimit)}`)
       }
   
       // If txGroupId is nonzero, push "txGroupId=..."
       if (txGroupId) {
-        queryParams.push(`txGroupId=${encodeURIComponent(txGroupId)}`);
+        queryParams.push(`txGroupId=${encodeURIComponent(txGroupId)}`)
       }
   
       // Address
       if (address) {
-        queryParams.push(`address=${encodeURIComponent(address)}`);
+        queryParams.push(`address=${encodeURIComponent(address)}`)
       }
       // Confirmation status
       if (confirmationStatus) {
-        queryParams.push(`confirmationStatus=${encodeURIComponent(confirmationStatus)}`);
+        queryParams.push(`confirmationStatus=${encodeURIComponent(confirmationStatus)}`)
       }
       // Limit (if you want to explicitly pass limit=0, consider whether to skip or not)
       if (limit !== undefined) {
@@ -1684,6 +1710,7 @@ const searchTransactions = async ({
   
       const queryString = queryParams.join('&');
       const url = `${baseUrl}/transactions/search?${queryString}`;
+      console.warn(`calling the following for search transactions: ${url}`)
   
       // 2) Fetch
       const response = await fetch(url, {
@@ -1691,15 +1718,15 @@ const searchTransactions = async ({
         headers: {
           'Accept': '*/*'
         }
-      });
+      })
   
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to search transactions: HTTP ${response.status}, ${errorText}`);
+        const errorText = await response.text()
+        throw new Error(`Failed to search transactions: HTTP ${response.status}, ${errorText}`)
       }
   
       // 3) Parse JSON
-      const txArray = await response.json();
+      const txArray = await response.json()
   
       // Check if the response is indeed an array of transactions
       if (!Array.isArray(txArray)) {
@@ -1708,10 +1735,42 @@ const searchTransactions = async ({
   
       return txArray; // e.g. [{ type, timestamp, reference, ... }, ...]
     } catch (error) {
-      console.error("Error in searchTransactions:", error);
-      throw error;
+      console.error("Error in searchTransactions:", error)
+      throw error
     }
-  };
+  }
+
+const searchPendingTransactions = async (limit = 20, offset = 0) => {
+    try {
+      const queryParams = []
+      if (limit) queryParams.push(`limit=${limit}`)
+      if (offset) queryParams.push(`offset=${offset}`)
+  
+      const queryString = queryParams.join('&');
+      const url = `${baseUrl}/transactions/pending${queryString ? `?${queryString}` : ''}`
+  
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': '*/*' },
+      })
+  
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to search pending transactions: HTTP ${response.status}, ${errorText}`)
+      }
+  
+      const result = await response.json();
+      if (!Array.isArray(result)) {
+        throw new Error("Expected an array for pending transactions, but got something else.")
+      }
+  
+      return result; // e.g. [{type, signature, approvalStatus, ...}, ...]
+    } catch (error) {
+      console.error("Error in searchPendingTransactions:", error)
+      throw error
+    }
+  }
+  
   
   
 

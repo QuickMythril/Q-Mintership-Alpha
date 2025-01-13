@@ -445,7 +445,13 @@ const validateMinterName = async(minterName) => {
   try {
     const nameInfo =  await getNameInfo(minterName)
     const name = nameInfo.name
-    return name
+    if (name) {
+      console.log(`name information found, returning:`, name)
+      return name
+    } else {
+      console.warn(`no name information found, this is not a registered name: '${minterName}', Returning null`, name)
+      return null
+    }
   } catch (error){
       console.error(`extracting name from name info: ${minterName} failed.`, error)
       return null
@@ -831,13 +837,13 @@ const createRemoveButtonHtml = (name, cardIdentifier) => {
               style="padding: 10px; background: rgb(134, 80, 4); color: white; border: none; cursor: pointer; border-radius: 5px;"
               onmouseover="this.style.backgroundColor='rgb(47, 28, 11) '"
                   onmouseout="this.style.backgroundColor='rgb(134, 80, 4) '">
-        KICK Minter
+        Create KICK Tx
       </button>
       <button onclick="handleBanMinter('${name}')"
               style="padding: 10px; background:rgb(93, 7, 7); color: white; border: none; cursor: pointer; border-radius: 5px;"
               onmouseover="this.style.backgroundColor='rgb(39, 9, 9) '"
                   onmouseout="this.style.backgroundColor='rgb(93, 7, 7) '">
-        BAN Minter
+        Create BAN Tx
       </button>
     </div>
   `
@@ -847,18 +853,18 @@ const handleKickMinter = async (minterName) => {
   try {
     // Optional block check
     let txGroupId = 0
-    const { height: currentHeight } = await getLatestBlockInfo()
-    const isBlockPassed = currentHeight >= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT
+    // const { height: currentHeight } = await getLatestBlockInfo()
+    const isBlockPassed = await featureTriggerCheck()
     if (isBlockPassed) {
       console.log(`block height above featureTrigger Height, using group approval method...txGroupId 694`)
       txGroupId = 694
     }
 
     // Get the minter address from name info
-    const minterInfo = await getNameInfo(minterName)
-    const minterAddress = minterInfo?.owner
+    const minterNameInfo = await getNameInfo(minterName)
+    const minterAddress = minterNameInfo?.owner
     if (!minterAddress) {
-      alert(`No valid address found for minter name: ${minterName}`)
+      alert(`No valid address found for minter name: ${minterName}, this should NOT have happened, please report to developers...`)
       return
     }
 
@@ -872,6 +878,11 @@ const handleKickMinter = async (minterName) => {
       action: "SIGN_TRANSACTION",
       unsignedBytes: rawKickTransaction
     })
+    if (!signedKickTransaction) {
+      console.warn(`this only happens if the SIGN_TRANSACTION qortalRequest failed... are you using the legacy UI prior to this qortalRequest being added?`)
+      alert(`this only happens if the SIGN_TRANSACTION qortalRequest failed... are you using the legacy UI prior to this qortalRequest being added? Please talk to developers.`)
+      return
+    }
     
     let txToProcess = signedKickTransaction
 
@@ -894,8 +905,9 @@ const handleKickMinter = async (minterName) => {
 const handleBanMinter = async (minterName) => {
   try {
     let txGroupId = 0
-    const { height: currentHeight } = await getLatestBlockInfo()
-    if (currentHeight <= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT) {
+    // const { height: currentHeight } = await getLatestBlockInfo()
+    const isBlockPassed = await featureTriggerCheck()
+    if (!isBlockPassed) {
       console.log(`block height is under the removal featureTrigger height, using txGroupId 0`)
       txGroupId = 0
     } else {
@@ -903,11 +915,11 @@ const handleBanMinter = async (minterName) => {
       txGroupId = 694
     }
 
-    const minterInfo = await getNameInfo(minterName)
-    const minterAddress = minterInfo?.owner
+    const minterNameInfo = await getNameInfo(minterName)
+    const minterAddress = minterNameInfo?.owner
 
     if (!minterAddress) {
-      alert(`No valid address found for minter name: ${minterName}`)
+      alert(`No valid address found for minter name: ${minterName}, this should NOT have happened, please report to developers...`)
       return
     }
 
@@ -921,6 +933,11 @@ const handleBanMinter = async (minterName) => {
       action: "SIGN_TRANSACTION",
       unsignedBytes: rawBanTransaction
     })
+    if (!signedBanTransaction) {
+      console.warn(`this only happens if the SIGN_TRANSACTION qortalRequest failed... are you using the legacy UI prior to this qortalRequest being added?`)
+      alert(`this only happens if the SIGN_TRANSACTION qortalRequest failed... are you using the legacy UI prior to this qortalRequest being added? Please talk to developers.`)
+      return
+    }
 
     let txToProcess = signedBanTransaction
 

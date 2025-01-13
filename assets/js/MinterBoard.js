@@ -5,7 +5,8 @@ let isExistingCard = false
 let existingCardData = {}
 let existingCardIdentifier = {}
 const MIN_ADMIN_YES_VOTES = 9;
-const GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT = 99999999 //TODO update this to correct featureTrigger height when known, either that, or pull from core.
+const GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT = 9999950 //TODO update this to correct featureTrigger height when known, either that, or pull from core.
+let featureTriggerPassed = false
 let isApproved = false
 
 const loadMinterBoardPage = async () => {
@@ -117,7 +118,7 @@ const loadMinterBoardPage = async () => {
     event.preventDefault()
     await publishCard()
   })
-
+  await featureTriggerCheck()
   await loadCards()
 }
 
@@ -514,8 +515,15 @@ const processPollData= async (pollData, minterGroupMembers, minterAdmins, creato
   const memberAddresses = minterGroupMembers.map(m => m.member)
   const minterAdminAddresses = minterAdmins.map(m => m.member)
   const adminGroupsMembers = await fetchAllAdminGroupsMembers()
+  const featureTriggerPassed = await featureTriggerCheck()
   const groupAdminAddresses = adminGroupsMembers.map(m => m.member)
-  const adminAddresses = [...minterAdminAddresses, ...groupAdminAddresses]
+  let adminAddresses = [...minterAdminAddresses]
+
+  if (!featureTriggerPassed) {
+    console.log(`featureTrigger is NOT passed, only showing admin results from Minter Admins and Group Admins`)
+    adminAddresses = [...minterAdminAddresses, ...groupAdminAddresses]
+  }
+  
   let adminYes = 0, adminNo = 0
   let minterYes = 0, minterNo = 0
   let yesWeight = 0, noWeight = 0
@@ -1050,19 +1058,32 @@ const createInviteButtonHtml = (creator, cardIdentifier) => {
   return `
       <div id="invite-button-container-${cardIdentifier}" style="margin-top: 1em;">
           <button onclick="handleInviteMinter('${creator}')"
-                  style="padding: 10px; background:rgb(0, 109, 76) ; color: white; border: dotted; cursor: pointer; border-radius: 5px;"
+                  style="padding: 10px; background:rgb(0, 109, 76) ; color: white; border: dotted; border-color: white; cursor: pointer; border-radius: 5px;"
                   onmouseover="this.style.backgroundColor='rgb(25, 47, 39) '"
                   onmouseout="this.style.backgroundColor='rgba(7, 122, 101, 0.63) '"
                   >
-              Invite Minter
+              Create Minter Invite
           </button>
       </div>
   `
 }
 
-const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) => {
+const featureTriggerCheck = async () => {
   const latestBlockInfo = await getLatestBlockInfo()
   const isBlockPassed = latestBlockInfo.height >= GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT
+  if (isBlockPassed) {
+    console.warn(`featureTrigger check (verifyFeatureTrigger) determined block has PASSED:`, isBlockPassed)
+    featureTriggerPassed = true
+    return true
+  } else {
+    console.warn(`featureTrigger check (verifyFeatureTrigger) determined block has NOT PASSED:`, isBlockPassed)
+    featureTriggerPassed = false
+    return false
+  }
+}
+
+const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) => {
+  const isBlockPassed = await featureTriggerCheck()
   let minAdminCount
   const minterAdmins = await fetchMinterGroupAdmins() 
 
@@ -1081,10 +1102,10 @@ const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) =>
   }
 
   if (isBlockPassed) {
-    const minterAddressInfo = await getNameInfo(creator)
-    const minterAddress = await minterAddressInfo.owner
+    const minterNameInfo = await getNameInfo(creator)
+    const minterAddress = await minterNameInfo.owner
     if (userState.isMinterAdmin){
-      let groupApprovalHtml = await checkGroupApprovalAndCreateButton(minterAddress, cardIdentifier, 'GROUP_INVITE')
+      let groupApprovalHtml = await checkGroupApprovalAndCreateButton(minterAddress, cardIdentifier, "GROUP_INVITE")
       if (groupApprovalHtml) {
         return groupApprovalHtml
       }
@@ -1093,41 +1114,103 @@ const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) =>
     }
   }
 
-  if (adminYes >= minAdminCount && userState.isMinterAdmin) {
-      const inviteButtonHtml = createInviteButtonHtml(creator, cardIdentifier)
-      console.log(`admin votes over 9, creating invite button...`, adminYes)
+  if (adminYes >= minAdminCount && (userState.isMinterAdmin)) {
+    const inviteButtonHtml = createInviteButtonHtml(creator, cardIdentifier)
+    console.log(`admin votes over 9, creating invite button...`, adminYes)
     return inviteButtonHtml
   }
 
   return null
 }
 
+const findPendingApprovalTxForAddress = async (address, txType, limit = 0, offset = 0) => {
+  // 1) Fetch all pending transactions
+  const pendingTxs = await searchPendingTransactions(limit, offset)
+  // if a txType is passed, return the results related to that type, if not, then return any pending tx of the potential types.
+  let relevantTypes
+  if (txType) {
+    relevantTypes = new Set([txType])
+  } else {
+    relevantTypes = new Set(["GROUP_INVITE", "GROUP_BAN", "GROUP_KICK"])
+  }
+
+  // Filter pending TX for relevant types
+  const relevantTxs = pendingTxs.filter((tx) => relevantTypes.has(tx.type))
+
+  // Further filter by whether 'address' matches the correct field
+  //    - GROUP_INVITE => invitee
+  //    - GROUP_BAN => offender
+  //    - GROUP_KICK => member
+  //    If the user passed a specific txType, only one branch might matter.
+  const matchedTxs = relevantTxs.filter((tx) => {
+    switch (tx.type) {
+      case "GROUP_INVITE":
+        return tx.invitee === address
+      case "GROUP_BAN":
+        return tx.offender === address
+      case "GROUP_KICK":
+        return tx.member === address
+      default:
+        return false
+    }
+  })
+
+  return matchedTxs // Array of matching pending transactions
+}
+
 const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transactionType) => {
-  const txTypes = [`${transactionType}`]
-  const confirmationStatus = 'CONFIRMED'
+  const txTypes = [transactionType]
 
-  const groupApprovalSearchResults = await searchTransactions(txTypes, address, confirmationStatus, limit, reverse, offset)
-  const pendingApprovals = groupApprovalSearchResults.filter(tx => tx.approvalStatus === 'PENDING')
+  const txSearchResults = await searchTransactions({
+    txTypes,
+    address: `${address}`,
+    confirmationStatus: 'CONFIRMED',
+    limit: 0,
+    reverse: true,
+    offset: 0,
+    startBlock: 1990000,
+    blockLimit: 0,
+    txGroupId: 694
+  })
 
+  const approvalTxType = ['GROUP_APPROVAL']
+  const approvalSearchResults = await searchTransactions({
+    txTypes: approvalTxType,
+    address: `${address}`,
+    confirmationStatus: 'CONFIRMED',
+    limit: 0,
+    reverse: true,
+    offset: 0,
+    startBlock: 1990000,
+    blockLimit: 0,
+    txGroupId: 0 
+  })
+
+  console.warn(`transaction search results, this is for comparison to pendingApprovals search, these are not used:`,txSearchResults)
+  const pendingApprovals = await findPendingApprovalTxForAddress(address, transactionType)
+  
   if (pendingApprovals) {
-    console.warn(`pendingApprovals FOUND: ${pendingApprovals}`)
+    console.warn(`this is what is used for pending results... pendingApprovals FOUND:`, pendingApprovals)
   }
 
-  if (pendingApprovals.length === 0) {
-    return
+  if ((pendingApprovals.length === 0) || (!pendingApprovals)) {
+    console.warn(`no pending approval transactions found, returning null...`)
+    return null
   }
+  const existingApprovalCount = approvalSearchResults.length
   const txSig = pendingApprovals[0].signature
 
   if (transactionType === `GROUP_INVITE`){
 
     const approvalButtonHtml = `
     <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+      <h2 style="color:rgb(181, 214, 100);">Existing Invite Approvals: ${existingApprovalCount}</h2>
       <button 
-          style="padding: 8px; background:rgb(37, 99, 44); color: #000; border: 1px solid #333; border-radius: 5px; cursor: pointer;"
+          style="padding: 8px; background:rgb(37, 97, 99); color:rgb(215, 215, 215) ;  border: 1px solid #333; border-color: white; border-radius: 5px; cursor: pointer;"
           onmouseover="this.style.backgroundColor='rgb(25, 47, 39) '"
-          onmouseout="this.style.backgroundColor='rgb(37, 99, 44) '"
-          onclick="handleGroupApproval('${address}','${txSig}')">
-        Approve Invite
+          onmouseout="this.style.backgroundColor='rgb(37, 96, 99) '"
+          onclick="handleGroupApproval('${txSig}')">
+        Approve Invite Tx
       </button>
     </div>
     `
@@ -1138,12 +1221,13 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
 
     const approvalButtonHtml = `
     <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+    <h2 style="color:rgb(199, 100, 64);">Existing Kick Approvals: ${existingApprovalCount}</h2>
       <button 
-          style="padding: 8px; background:rgb(119, 91, 21); color: #000; border: 1px solid #333; border-radius: 5px; cursor: pointer;"
+          style="padding: 8px; background:rgb(119, 91, 21); color:rgb(201, 255, 251) ;  border: 1px solid #333; border-color:rgb(102, 69, 60); border-radius: 5px; cursor: pointer;"
           onmouseover="this.style.backgroundColor='rgb(50, 52, 51) '"
           onmouseout="this.style.backgroundColor='rgb(119, 91, 21) '"
-          onclick="handleGroupApproval('${address}','${txSig}')">
-        Approve Kick
+          onclick="handleGroupApproval('${txSig}')">
+        Approve Kick Tx
       </button>
     </div>
     `
@@ -1154,12 +1238,13 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
 
     const approvalButtonHtml = `
     <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+    <h2 style="color:rgb(189, 40, 40);">Existing Ban Approvals: ${existingApprovalCount}</h2>
       <button 
-          style="padding: 8px; background:rgb(54, 7, 7); color: #000; border: 1px solid #333; border-radius: 5px; cursor: pointer;"
+          style="padding: 8px; background:rgb(54, 7, 7); color:rgb(201, 255, 251) ;  border: 1px solid #333; border-color:rgb(204, 94, 94); border-radius: 5px; cursor: pointer;"
           onmouseover="this.style.backgroundColor='rgb(50, 52, 51) '"
           onmouseout="this.style.backgroundColor='rgb(54, 7, 7) '"
-          onclick="handleGroupApproval('${address}','${txSig}')">
-        Approve Kick
+          onclick="handleGroupApproval('${txSig}')">
+        Approve Ban Tx
       </button>
     </div>
     `
@@ -1167,7 +1252,7 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
   }
 }
 
-const handleGroupApproval = async (address, pendingApprovalSignature) => {
+const handleGroupApproval = async (pendingSignature) => {
   try{
     if (!userState.isMinterAdmin) {
       console.warn(`non-admin attempting to sign approval!`)
@@ -1175,22 +1260,14 @@ const handleGroupApproval = async (address, pendingApprovalSignature) => {
     }
     const fee = 0.01
     const adminPublicKey = await getPublicKeyByName(userState.accountName)
-    const txGroupId = 694
-    const rawGroupApprovalTransaction = await createGroupApprovalTransaction(address, adminPublicKey, pendingApprovalSignature, txGroupId, fee)
+    const txGroupId = 0
+    const rawGroupApprovalTransaction = await createGroupApprovalTransaction(adminPublicKey, pendingSignature, txGroupId, fee)
     const signedGroupApprovalTransaction = await qortalRequest({
       action: "SIGN_TRANSACTION",
       unsignedBytes: rawGroupApprovalTransaction
     })
-    // const switchToBase58 = isBase64(signedGroupApprovalTransaction)
-    let txToProcess = signedGroupApprovalTransaction
 
-    // if (switchToBase58){
-    //   console.warn(`base64 tx found, converting to base58`,signedGroupApprovalTransaction)
-    //   const convertedToHex = await base64ToHex(signedGroupApprovalTransaction)
-    //   const base58TxData = await hexToBase58(convertedToHex)
-    //   txToProcess = base58TxData
-    //   console.log(`base58ConvertedSignedTxData to process:`,txToProcess)
-    // }
+    let txToProcess = signedGroupApprovalTransaction
     const processGroupApprovalTx = await processTransaction(txToProcess)
 
     if (processGroupApprovalTx) {
@@ -1209,23 +1286,24 @@ const handleJoinGroup = async (minterAddress) => {
   try{
     if (userState.accountAddress === minterAddress) {
       console.log(`minter user found `)
+
+      const qRequestAttempt = await qortalRequest({
+        action: "JOIN_GROUP",
+        groupId: 694
+      })
+
+      if (qRequestAttempt) {
+        return true
+      }
+
       const joinerPublicKey = getPublicKeyFromAddress(minterAddress)
-      fee = 0.01
+      const fee = 0.01
       const joinGroupTransactionData = await createGroupJoinTransaction(minterAddress, joinerPublicKey, 694, 0, fee)
       const signedJoinGroupTransaction = await qortalRequest({
         action: "SIGN_TRANSACTION",
         unsignedBytes: joinGroupTransactionData
       })
       let txToProcess = signedJoinGroupTransaction
-      // const switchToBase58 = isBase64(signedJoinGroupTransaction)
-
-      // if (switchToBase58){
-      //   console.warn(`base64 tx found, converting to base58`, signedJoinGroupTransaction)
-      //   const convertedToHex = await base64ToHex(signedJoinGroupTransaction)
-      //   const base58TxData = await hexToBase58(convertedToHex)
-      //   txToProcess = base58TxData
-      //   console.log(`base58ConvertedSignedTxData to process:`,txToProcess)
-      // }
       const processJoinGroupTransaction = await processTransaction(txToProcess)
 
       if (processJoinGroupTransaction){
@@ -1295,16 +1373,16 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
         inviteHtmlAdd = `
           <div id="join-button-container-${cardIdentifier}" style="margin-top: 1em;">
             <button 
-                style="padding: 8px; background:rgb(37, 99, 44); color: #000; border: 1px solid #333; border-radius: 5px; cursor: pointer;"
+                style="padding: 8px; background:rgb(37, 99, 44); color:rgb(240, 240, 240); border: 1px solid rgb(255, 255, 255); border-radius: 5px; cursor: pointer;"
                 onmouseover="this.style.backgroundColor='rgb(25, 47, 39) '"
                 onmouseout="this.style.backgroundColor='rgb(37, 99, 44) '"
                 onclick="handleJoinGroup('${userState.accountAddress}')">
-              Approve Invite
+              Join MINTER Group
             </button>
           </div>
           `
       }else{
-        console.log(`user is not the minter... displaying no join button`)
+        console.log(`user is not the minter... NOT displaying any join button`)
         inviteHtmlAdd = ''
       }
     }
