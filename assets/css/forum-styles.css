@@ -515,6 +515,16 @@ body {
   align-items: center;
 }
 
+.promotion-section{
+  display: flex;
+  text-align: left;
+  padding: 0em;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: center;
+  align-items: center;
+}
+
 
 /* Form Heading */
 .publish-card-view h3 {
@@ -726,7 +736,7 @@ body {
 
 .minter-card-results div {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
 }
 
 .minter-card-results span {

@@ -56,7 +56,7 @@ function loadMessagesFromLocalStorage() {
       console.log(`Loaded ${messageOrder.length} messages from localStorage.`)
     }
   } catch (error) {
-    console.error("Error loading messages from localStorage:", error);
+    console.error("Error loading messages from localStorage:", error)
   }
 }
 
@@ -98,6 +98,23 @@ document.addEventListener("DOMContentLoaded", async () => {
     })
   })
 
+  const addRemoveAdminLinks = document.querySelectorAll('a[href="ADDREMOVEADMIN"]')
+  addRemoveAdminLinks.forEach(link => {
+    link.addEventListener('click', async (event) => {
+      event.preventDefault()
+      // Possibly require user to login if not logged
+      if (!userState.isLoggedIn) {
+        await login()
+      }
+      if (typeof loadMinterBoardPage === "undefined") {
+        console.log("loadMinterBoardPage not found, loading script dynamically...")
+        await loadScript("./assets/js/MinterBoard.js")
+      }
+      await loadAddRemoveAdminPage()
+    })
+  })
+    
+
   // --- ADMIN CHECK ---
   await verifyUserIsAdmin()
 
@@ -116,7 +133,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  if (userState.isAdmin) {
+  if (userState.isAdmin || userState.isForumAdmin || userState.isMinterAdmin) {
     console.log(`User is an Admin. Admin-specific buttons will remain visible.`)
 
     // DATA-BOARD Links for Admins
@@ -233,7 +250,7 @@ const loadForumPage = async () => {
     </div>
   `
 
-  document.body.appendChild(mainContent);
+  document.body.appendChild(mainContent)
 
   // Add event listeners to room buttons
   document.getElementById("minters-room").addEventListener("click", () => {

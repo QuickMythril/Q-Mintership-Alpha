@@ -1,4 +1,4 @@
-// NOTE - Change isTestMode to false prior to actual release ---- !important - You may also change identifier if you want to not show older cards.
+
 const isEncryptedTestMode = false
 const encryptedCardIdentifierPrefix = "card-MAC"
 let isUpdateCard = false
@@ -13,7 +13,7 @@ let adminPublicKeys = []
 let kickTransactions = []
 let banTransactions = []
 let adminBoardState = {
-  kickedCards: new Set(),  // store identifiers or addresses
+  kickedCards: new Set(),  // store identifiers 
   bannedCards: new Set(),  // likewise
   hiddenList: new Set(),   // user-hidden
   // ... we can add other things to state if needed...
@@ -107,6 +107,7 @@ const loadAdminBoardPage = async () => {
     </div>
     </div>
   `
+
   document.body.appendChild(mainContent)
   const publishCardButton = document.getElementById("publish-card-button")
 
@@ -149,13 +150,21 @@ const loadAdminBoardPage = async () => {
     })
   }
 
-  document.getElementById('show-kicked-banned-checkbox')?.addEventListener('change', () => {
-    fetchAllEncryptedCards()
-  })
+  const showKickedBannedCheckbox = document.getElementById('admin-show-kicked-banned-checkbox')
 
-  document.getElementById('show-admin-hidden-checkbox')?.addEventListener('change', () => {
-    fetchAllEncryptedCards()
-  })
+  if (showKickedBannedCheckbox) {
+    showKickedBannedCheckbox.addEventListener('change', async (event) => {
+      await fetchAllEncryptedCards(true);
+    })
+  }
+
+  const showHiddenCardsCheckbox = document.getElementById('admin-show-hidden-checkbox')
+  if (showHiddenCardsCheckbox) {
+    showHiddenCardsCheckbox.addEventListener('change', async (event) => {
+      await fetchAllEncryptedCards(true)
+    })
+  }
+  
   
   document.getElementById("publish-card-form").addEventListener("submit", async (event) => {
     event.preventDefault()
@@ -172,10 +181,30 @@ const loadAdminBoardPage = async () => {
 }
 
 const fetchAllKicKBanTxData = async () => {
-  const kickTxType = "GROUP_KICK";
-  const banTxType = "GROUP_BAN";
+  const kickTxType = "GROUP_KICK"
+  const banTxType = "GROUP_BAN"
 
-  // 1) Fetch ban transactions
+  // Helper function to filter transactions
+  const filterTransactions = (rawTransactions) => {
+    // Group transactions by member
+    const memberTxMap = rawTransactions.reduce((map, tx) => {
+      if (!map[tx.member]) {
+        map[tx.member] = []
+      }
+      map[tx.member].push(tx)
+      return map
+    }, {})
+
+    // Filter out members with both pending and non-pending transactions
+    return Object.values(memberTxMap)
+      .filter(txs => txs.every(tx => tx.approvalStatus !== 'PENDING'))
+      .flat()
+      // .filter((txs) => !(txs.some(tx => tx.approvalStatus === 'PENDING') &&
+      //                    txs.some(tx => tx.approvalStatus !== 'PENDING')))
+      // .flat()
+  }
+
+  // Fetch ban transactions
   const rawBanTransactions = await searchTransactions({
     txTypes: [banTxType],
     address: '',
@@ -186,12 +215,13 @@ const fetchAllKicKBanTxData = async () => {
     startBlock: 1990000,
     blockLimit: 0,
     txGroupId: 0,
-  });
-  // Filter out 'PENDING'
-  banTransactions = rawBanTransactions.filter((tx) => tx.approvalStatus !== 'PENDING');
-  console.warn('banTxData (no PENDING):', banTransactions);
+  })
 
-  // 2) Fetch kick transactions
+  // Filter transactions for bans
+  banTransactions = filterTransactions(rawBanTransactions)
+  console.warn('banTxData (filtered):', banTransactions)
+
+  // Fetch kick transactions
   const rawKickTransactions = await searchTransactions({
     txTypes: [kickTxType],
     address: '',
@@ -202,12 +232,12 @@ const fetchAllKicKBanTxData = async () => {
     startBlock: 1990000,
     blockLimit: 0,
     txGroupId: 0,
-  });
-  // Filter out 'PENDING'
-  kickTransactions = rawKickTransactions.filter((tx) => tx.approvalStatus !== 'PENDING');
-  console.warn('kickTxData (no PENDING):', kickTransactions);
-};
+  })
 
+  // Filter transactions for kicks
+  kickTransactions = filterTransactions(rawKickTransactions)
+  console.warn('kickTxData (filtered):', kickTransactions)
+}
 
 
 // Example: fetch and save admin public keys and count

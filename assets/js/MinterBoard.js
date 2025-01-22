@@ -1,11 +1,11 @@
 // // NOTE - Change isTestMode to false prior to actual release ---- !important - You may also change identifier if you want to not show older cards.
 const testMode = false
-const cardIdentifierPrefix = "Minter-board-card"
+const minterCardIdentifierPrefix = "Minter-board-card"
 let isExistingCard = false
 let existingCardData = {}
 let existingCardIdentifier = {}
 const MIN_ADMIN_YES_VOTES = 9;
-const GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT = 9999950 //TODO update this to correct featureTrigger height when known, either that, or pull from core.
+const GROUP_APPROVAL_FEATURE_TRIGGER_HEIGHT = 2012800 //TODO update this to correct featureTrigger height when known, either that, or pull from core.
 let featureTriggerPassed = false
 let isApproved = false
 
@@ -54,7 +54,7 @@ const loadMinterBoardPage = async () => {
 
   document.getElementById("publish-card-button").addEventListener("click", async () => {
     try {
-      const fetchedCard = await fetchExistingCard()
+      const fetchedCard = await fetchExistingCard(minterCardIdentifierPrefix)
       if (fetchedCard) {
         // An existing card is found
         if (testMode) {
@@ -84,7 +84,7 @@ const loadMinterBoardPage = async () => {
 
       // Show the form
       const publishCardView = document.getElementById("publish-card-view")
-      publishCardView.style.display = "flex";
+      publishCardView.style.display = "flex"
       document.getElementById("cards-container").style.display = "none"
     } catch (error) {
       console.error("Error checking for existing card:", error)
@@ -95,7 +95,7 @@ const loadMinterBoardPage = async () => {
   document.getElementById("refresh-cards-button").addEventListener("click", async () => {
     const cardsContainer = document.getElementById("cards-container")
     cardsContainer.innerHTML = "<p>Refreshing cards...</p>"
-    await loadCards();
+    await loadCards(minterCardIdentifierPrefix)
   })
   
 
@@ -117,17 +117,17 @@ const loadMinterBoardPage = async () => {
 
   document.getElementById("publish-card-form").addEventListener("submit", async (event) => {
     event.preventDefault()
-    await publishCard()
+    await publishCard(minterCardIdentifierPrefix)
   })
   await featureTriggerCheck()
-  await loadCards()
+  await loadCards(minterCardIdentifierPrefix)
 }
 
 const extractMinterCardsMinterName = async (cardIdentifier) => {
   // Ensure the identifier starts with the prefix
-  if (!cardIdentifier.startsWith(`${cardIdentifierPrefix}-`)) {
-    throw new Error('Invalid identifier format or prefix mismatch')
-  }
+  if ((!cardIdentifier.startsWith(minterCardIdentifierPrefix)) && (!cardIdentifier.startsWith(addRemoveIdentifierPrefix))) {
+    throw new Error('minterCard does not match identifier check')
+  } 
   // Split the identifier into parts
   const parts = cardIdentifier.split('-')
   // Ensure the format has at least 3 parts
@@ -135,9 +135,22 @@ const extractMinterCardsMinterName = async (cardIdentifier) => {
     throw new Error('Invalid identifier format')
   }
   try {
-    const searchSimpleResults = await searchSimple('BLOG_POST', `${cardIdentifier}`, '', 1)
-    const minterName = await searchSimpleResults.name
-    return minterName
+    if (cardIdentifier.startsWith(minterCardIdentifierPrefix)){
+      const searchSimpleResults = await searchSimple('BLOG_POST', `${cardIdentifier}`, '', 1)
+      const minterName = await searchSimpleResults.name
+      return minterName
+    } else if (cardIdentifier.startsWith(addRemoveIdentifierPrefix)) {
+      const searchSimpleResults = await searchSimple('BLOG_POST', `${cardIdentifier}`, '', 1)
+      const publisherName = searchSimpleResults.name
+      const cardDataResponse = await qortalRequest({
+        action: "FETCH_QDN_RESOURCE",
+        name: publisherName,
+        service: "BLOG_POST",
+        identifier: cardIdentifier,
+      })
+      const minterName = cardDataResponse.minterName
+      return minterName
+    }
   } catch (error) {
     throw error
   }
@@ -146,6 +159,7 @@ const extractMinterCardsMinterName = async (cardIdentifier) => {
 const processMinterCards = async (validMinterCards) => {
   const latestCardsMap = new Map()
 
+  // Deduplicate by identifier, keeping the most recent
   validMinterCards.forEach(card => {
     const timestamp = card.updated || card.created || 0
     const existingCard = latestCardsMap.get(card.identifier)
@@ -155,28 +169,54 @@ const processMinterCards = async (validMinterCards) => {
     }
   })
 
+  // Convert Map back to array
+  const uniqueValidCards = Array.from(latestCardsMap.values())
+
   const minterGroupMembers = await fetchMinterGroupMembers()
   const minterGroupAddresses = minterGroupMembers.map(m => m.member)
   const minterNameMap = new Map()
 
-  for (const card of validMinterCards) {
-    const minterName = await extractMinterCardsMinterName(card.identifier)
+  // For each card, extract minterName safely
+  for (const card of uniqueValidCards) {
+    let minterName
+    try {
+      // If this throws, we catch below and skip
+      minterName = await extractMinterCardsMinterName(card.identifier)
+    } catch (error) {
+      console.warn(
+        `Skipping card ${card.identifier} because extractMinterCardsMinterName failed:`,
+        error
+      )
+      continue // Skip this card and move on
+    }
+
     console.log(`minterName`, minterName)
+    // Next, get minterNameInfo
     const minterNameInfo = await getNameInfo(minterName)
     if (!minterNameInfo) {
-      console.warn(`minterNameInfo is null for minter: ${minterName}`)
-      continue
-    }
-    const minterAddress = await minterNameInfo.owner
-
-    if (!minterAddress) {
-      console.warn(`minterAddress is FAKE or INVALID in some way! minter: ${minterName}`)
-      continue
-    } else if (minterGroupAddresses.includes(minterAddress)){
-      console.log(`existing minter FOUND and/or FAKE NAME FOUND (if following is null then fake name: ${minterAddress}), not including minter card: ${card.identifier}`)
+      console.warn(`minterNameInfo is null for minter: ${minterName}, skipping card.`)
       continue
     }
 
+    const minterAddress = minterNameInfo.owner
+    // Validate the address
+    const addressValid = await getAddressInfo(minterAddress)
+    if (!minterAddress || !addressValid) {
+      console.warn(`minterAddress invalid or missing for: ${minterName}, skipping card.`, minterAddress)
+      continue
+    }
+
+    // If this is a 'regular' minter card, skip if user is already a minter
+    if (!card.identifier.includes('QM-AR-card')) {
+      if (minterGroupAddresses.includes(minterAddress)) {
+        console.log(
+          `existing minter found or fake name detected. Not including minter card: ${card.identifier}`
+        )
+        continue
+      }
+    }
+
+    // Keep only the most recent card for each minterName
     const existingCard = minterNameMap.get(minterName)
     const cardTimestamp = card.updated || card.created || 0
     const existingTimestamp = existingCard?.updated || existingCard?.created || 0
@@ -186,6 +226,7 @@ const processMinterCards = async (validMinterCards) => {
     }
   }
 
+  // Convert minterNameMap to final array
   const finalCards = []
   const seenMinterNames = new Set()
 
@@ -196,6 +237,7 @@ const processMinterCards = async (validMinterCards) => {
     }
   }
 
+  // Sort by timestamp descending
   finalCards.sort((a, b) => {
     const timestampA = a.updated || a.created || 0
     const timestampB = b.updated || b.created || 0
@@ -205,35 +247,37 @@ const processMinterCards = async (validMinterCards) => {
   return finalCards
 }
 
+
 //Main function to load the Minter Cards ----------------------------------------
-const loadCards = async () => {
+const loadCards = async (cardIdentifierPrefix) => {
   const cardsContainer = document.getElementById("cards-container")
+  let isARBoard = false
   cardsContainer.innerHTML = "<p>Loading cards...</p>"
+  if ((cardIdentifierPrefix.startsWith(`QM-AR-card`))) {
+    isARBoard = true
+    console.warn(`ARBoard determined:`, isARBoard)
+  }
 
   try {
-
     const response = await searchSimple('BLOG_POST', `${cardIdentifierPrefix}`, '' , 0)
 
     if (!response || !Array.isArray(response) || response.length === 0) {
       cardsContainer.innerHTML = "<p>No cards found.</p>"
-      return;
+      return
     }
-
     // Validate cards and filter
     const validatedCards = await Promise.all(
       response.map(async card => {
         const isValid = await validateCardStructure(card)
         return isValid ? card : null
       })
-    );
-
+    )
     const validCards = validatedCards.filter(card => card !== null)
 
     if (validCards.length === 0) {
       cardsContainer.innerHTML = "<p>No valid cards found.</p>"
       return
     }
-
     const finalCards = await processMinterCards(validCards)
 
     // Display skeleton cards immediately
@@ -264,7 +308,6 @@ const loadCards = async () => {
           removeSkeleton(card.identifier)
           return
         }
-
         const pollPublisherPublicKey = await getPollPublisherPublicKey(cardDataResponse.poll)
         const cardPublisherPublicKey = await getPublicKeyByName(card.name)
 
@@ -273,14 +316,39 @@ const loadCards = async () => {
           removeSkeleton(card.identifier)
           return
         }
-
         const pollResults = await fetchPollResults(cardDataResponse.poll)
         const bgColor = generateDarkPastelBackgroundBy(card.name)
         const commentCount = await countComments(card.identifier)
         const cardUpdatedTime = card.updated || null
-        const finalCardHTML = await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, bgColor)
-        
+
+        if (isARBoard) {
+          const name = await getNameInfo(cardDataResponse.minterName)
+          const address = name.owner
+          if (minterAdminAddresses && minterGroupAddresses) {
+            if (!minterAdminAddresses.includes(address) && !minterGroupAddresses.includes(address)) {
+              console.warn(`Found card from ARBoard that contained a non-minter!`)
+              removeSkeleton(card.identifier)
+              return
+            }
+          } else if (!minterAdminAddresses || !minterGroupAddresses){
+            const minterGroup = await fetchMinterGroupMembers()
+            const adminGroup = await fetchMinterGroupAdmins()
+            minterAdminAddresses = adminGroup.map(m => m.member)
+            minterGroupAddresses = minterGroup.map(m => m.member)
+            if (!minterAdminAddresses.includes(address) && !minterGroupAddresses.includes(address)) {
+              console.warn(`Found card from ARBoard that contained a non-minter!`)
+              removeSkeleton(card.identifier)
+              return
+            }
+          }
+        }
+
+        const finalCardHTML = isARBoard ? // If we're calling from the ARBoard, we will create HTML with a different function.
+        await createARCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, bgColor) 
+        : 
+        await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, bgColor)
         replaceSkeleton(card.identifier, finalCardHTML)
+
       } catch (error) {
         console.error(`Error processing card ${card.identifier}:`, error)
         removeSkeleton(card.identifier)
@@ -326,7 +394,7 @@ const createSkeletonCardHTML = (cardIdentifier) => {
 }
 
 // Function to check and fech an existing Minter Card if attempting to publish twice ----------------------------------------
-const fetchExistingCard = async () => {
+const fetchExistingCard = async (cardIdentifierPrefix) => {
   try {
     const response = await searchSimple('BLOG_POST', `${cardIdentifierPrefix}`, `${userState.accountName}`, 0, 0, '', true)
 
@@ -344,7 +412,6 @@ const fetchExistingCard = async () => {
         service: "BLOG_POST",
         identifier: mostRecentCard.identifier
       })
-
       existingCardIdentifier = mostRecentCard.identifier
       existingCardData = cardDataResponse
       isExistingCard = true
@@ -418,7 +485,7 @@ const loadCardIntoForm = async (cardData) => {
 }
 
 // Main function to publish a new Minter Card -----------------------------------------------
-const publishCard = async () => {
+const publishCard = async (cardIdentifierPrefix) => {
 
   const minterGroupData = await fetchMinterGroupMembers()
   const minterGroupAddresses = minterGroupData.map(m => m.member)
@@ -486,7 +553,7 @@ const publishCard = async () => {
     document.getElementById("publish-card-form").reset()
     document.getElementById("publish-card-view").style.display = "none"
     document.getElementById("cards-container").style.display = "flex"
-    await loadCards()
+    await loadCards(minterCardIdentifierPrefix)
 
   } catch (error) {
 
@@ -1084,44 +1151,75 @@ const featureTriggerCheck = async () => {
 }
 
 const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) => {
+
+  if (!userState.isMinterAdmin){
+    console.warn(`User is NOT an admin, not displaying invite/approve button...`)
+    return null
+  }
+
   const isBlockPassed = await featureTriggerCheck()
-  let minAdminCount
   const minterAdmins = await fetchMinterGroupAdmins() 
 
-  if (!isBlockPassed){
-    console.warn(`feature trigger not passed, using static number for minAdminCount`)
-    minAdminCount = 9
-  }
-
-  if ((minterAdmins) && (minterAdmins.length === 1)){
-    console.warn(`simply a double-check that there is only one MINTER group admin, in which case the group hasn't been transferred to null...keeping default minAdminCount of: ${minAdminCount}`)
-  } else if ((minterAdmins) && (minterAdmins.length > 1) && isBlockPassed){
-    const totalAdmins = minterAdmins.length
-    const fortyPercent = totalAdmins * 0.40
-    minAdminCount = Math.round(fortyPercent)
-    console.warn(`this is another check to ensure minterAdmin group has more than 1 admin. IF so we will calculate the 40% needed for GROUP_APPROVAL, that number is: ${minAdminCount}`)
-  }
-
+  let minAdminCount = 9
   if (isBlockPassed) {
-    const minterNameInfo = await getNameInfo(creator)
-    const minterAddress = await minterNameInfo.owner
-    if (userState.isMinterAdmin){
-      let groupApprovalHtml = await checkGroupApprovalAndCreateButton(minterAddress, cardIdentifier, "GROUP_INVITE")
-      if (groupApprovalHtml) {
-        return groupApprovalHtml
-      }
-    }else{
-      console.log(`USER NOT ADMIN, no need for group approval buttons...`)
+    minAdminCount = Math.round(minterAdmins.length * 0.4)
+    console.warn(`Using 40% => ${minAdminCount}`)
+  }
+
+  if (adminYes < minAdminCount) {
+    console.warn(`Admin votes not high enough (have=${adminYes}, need=${minAdminCount}). No button.`)
+    return null
+  }
+  console.log(`passed initial button creation checks, pulling additional data...`)
+  
+  const minterNameInfo = await getNameInfo(creator)
+  const minterAddress = await minterNameInfo.owner
+
+  const previousBanTx = await searchTransactions({
+    txTypes: ['GROUP_BAN'],
+    address: `${minterAddress}`,
+    confirmationStatus: 'CONFIRMED',
+    limit: 0,
+    reverse: true,
+    offset: 0,
+    startBlock: 1990000,
+    blockLimit: 0,
+    txGroupId: 0,
+  })
+  const previousBan = previousBanTx.filter((tx) => tx.approvalStatus !== 'PENDING')
+  const previousKickTx = await searchTransactions({
+    txTypes: ['GROUP_KICK'],
+    address: `${minterAddress}`,
+    confirmationStatus: 'CONFIRMED',
+    limit: 0,
+    reverse: true,
+    offset: 0,
+    startBlock: 1990000,
+    blockLimit: 0,
+    txGroupId: 0,
+  })
+  const previousKick = previousKickTx.filter((tx) => tx.approvalStatus !== 'PENDING')
+  const priorBanOrKick = (previousKick.length > 0 || previousBan.length > 0)
+
+  console.warn(`PriorBanOrKick determination:`, priorBanOrKick)
+
+  const inviteButtonHtml = createInviteButtonHtml(creator, cardIdentifier)
+  const groupApprovalHtml = await checkGroupApprovalAndCreateButton(minterAddress, cardIdentifier, "GROUP_INVITE")
+
+  if (!priorBanOrKick) {
+    console.log(`No prior kick/ban found, creating invite (or approve) button...` )
+    console.warn(`Existing Numbers - adminYes/minAdminCount: ${adminYes}/${minAdminCount}`)
+    if (groupApprovalHtml){
+      console.warn(`groupApprovalCheck found existing groupApproval, returning approval button instead of invite button...`)
+      return groupApprovalHtml
     }
-  }
-
-  if (adminYes >= minAdminCount && (userState.isMinterAdmin)) {
-    const inviteButtonHtml = createInviteButtonHtml(creator, cardIdentifier)
-    console.log(`admin votes over 9, creating invite button...`, adminYes)
+    console.warn(`No pending approvals or prior kick/ban found, but votes are high enough, returning invite button...`)
     return inviteButtonHtml
-  }
 
-  return null
+  } else if (priorBanOrKick){  
+    console.warn(`Prior kick/ban found! Including BOTH buttons (due to complexities in checking, displaying both buttons is simpler than attempting to display only one)...`)
+    return inviteButtonHtml + groupApprovalHtml
+  }
 }
 
 const findPendingApprovalTxForAddress = async (address, txType, limit = 0, offset = 0) => {
@@ -1132,17 +1230,12 @@ const findPendingApprovalTxForAddress = async (address, txType, limit = 0, offse
   if (txType) {
     relevantTypes = new Set([txType])
   } else {
-    relevantTypes = new Set(["GROUP_INVITE", "GROUP_BAN", "GROUP_KICK"])
+    relevantTypes = new Set(["GROUP_INVITE", "GROUP_BAN", "GROUP_KICK", "ADD_GROUP_ADMIN", "REMOVE_GROUP_ADMIN"])
   }
 
   // Filter pending TX for relevant types
   const relevantTxs = pendingTxs.filter((tx) => relevantTypes.has(tx.type))
 
-  // Further filter by whether 'address' matches the correct field
-  //    - GROUP_INVITE => invitee
-  //    - GROUP_BAN => offender
-  //    - GROUP_KICK => member
-  //    If the user passed a specific txType, only one branch might matter.
   const matchedTxs = relevantTxs.filter((tx) => {
     switch (tx.type) {
       case "GROUP_INVITE":
@@ -1151,33 +1244,22 @@ const findPendingApprovalTxForAddress = async (address, txType, limit = 0, offse
         return tx.offender === address
       case "GROUP_KICK":
         return tx.member === address
+      case "ADD_GROUP_ADMIN":
+        return tx.member === address
+      case "REMOVE_GROUP_ADMIN":
+        return tx.admin === address
       default:
         return false
     }
   })
+  console.warn(`matchedTxs:`,matchedTxs)
 
   return matchedTxs // Array of matching pending transactions
 }
 
 const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transactionType) => {
-  const txTypes = [transactionType]
-
-  const txSearchResults = await searchTransactions({
-    txTypes,
-    address: `${address}`,
-    confirmationStatus: 'CONFIRMED',
-    limit: 0,
-    reverse: true,
-    offset: 0,
-    startBlock: 1990000,
-    blockLimit: 0,
-    txGroupId: 694
-  })
-
-  const approvalTxType = ['GROUP_APPROVAL']
   const approvalSearchResults = await searchTransactions({
-    txTypes: approvalTxType,
-    address: `${address}`,
+    txTypes: ['GROUP_APPROVAL'],
     confirmationStatus: 'CONFIRMED',
     limit: 0,
     reverse: true,
@@ -1186,72 +1268,245 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
     blockLimit: 0,
     txGroupId: 0 
   })
+  const pendingApprovals = await findPendingApprovalTxForAddress(address, transactionType);
 
-  console.warn(`transaction search results, this is for comparison to pendingApprovals search, these are not used:`,txSearchResults)
-  const pendingApprovals = await findPendingApprovalTxForAddress(address, transactionType)
-  
-  if (pendingApprovals) {
-    console.warn(`this is what is used for pending results... pendingApprovals FOUND:`, pendingApprovals)
+  // If no pending transaction found, return null
+  if (!pendingApprovals || pendingApprovals.length === 0) {
+    console.warn("no pending approval transactions found, returning null...")
+    return null;
   }
-
-  if ((pendingApprovals.length === 0) || (!pendingApprovals)) {
-    console.warn(`no pending approval transactions found, returning null...`)
-    return null
-  }
-  const existingApprovalCount = approvalSearchResults.length
   const txSig = pendingApprovals[0].signature
+  // Among the already-confirmed GROUP_APPROVAL, filter for those referencing this txSig
+  const relevantApprovals = approvalSearchResults.filter(
+    (approvalTx) => approvalTx.pendingSignature === txSig
+  )
+  const { tableHtml, uniqueApprovalCount } = await buildApprovalTableHtml(
+    relevantApprovals,
+    getNameFromAddress
+  )
 
-  if (transactionType === `GROUP_INVITE`){
-
+  if (transactionType === "GROUP_INVITE") {
     const approvalButtonHtml = `
-    <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
-      <h2 style="color:rgb(181, 214, 100);">Existing Invite Approvals: ${existingApprovalCount}</h2>
-      <button 
-          style="padding: 8px; background:rgb(37, 97, 99); color:rgb(215, 215, 215) ;  border: 1px solid #333; border-color: white; border-radius: 5px; cursor: pointer;"
-          onmouseover="this.style.backgroundColor='rgb(25, 47, 39) '"
-          onmouseout="this.style.backgroundColor='rgb(37, 96, 99) '"
-          onclick="handleGroupApproval('${txSig}')">
-        Approve Invite Tx
-      </button>
-    </div>
+      <div style="display: flex; flex-direction: column; margin-top: 1em;">
+        <p style="color: rgb(181, 214, 100);">
+          Existing ${transactionType} Approvals: ${uniqueApprovalCount}
+        </p>
+        ${tableHtml}
+        <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+          <button
+            style="
+              padding: 8px;
+              background: rgb(37, 97, 99);
+              color: rgb(215, 215, 215);
+              border: 1px solid #333;
+              border-color: white;
+              border-radius: 5px;
+              cursor: pointer;
+            "
+            onmouseover="this.style.backgroundColor='rgb(25, 47, 39)'"
+            onmouseout="this.style.backgroundColor='rgb(37, 96, 99)'"
+            onclick="handleGroupApproval('${txSig}')"
+          >
+            Approve Invite Tx
+          </button>
+        </div>
+      </div>
     `
     return approvalButtonHtml
   }
-
-  if (transactionType === `GROUP_KICK`){
-
+  
+  if (transactionType === "GROUP_KICK") {
     const approvalButtonHtml = `
-    <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
-    <h2 style="color:rgb(199, 100, 64);">Existing Kick Approvals: ${existingApprovalCount}</h2>
-      <button 
-          style="padding: 8px; background:rgb(119, 91, 21); color:rgb(201, 255, 251) ;  border: 1px solid #333; border-color:rgb(102, 69, 60); border-radius: 5px; cursor: pointer;"
-          onmouseover="this.style.backgroundColor='rgb(50, 52, 51) '"
-          onmouseout="this.style.backgroundColor='rgb(119, 91, 21) '"
-          onclick="handleGroupApproval('${txSig}')">
-        Approve Kick Tx
-      </button>
-    </div>
+      <div style="display: flex; flex-direction: column; margin-top: 1em;">
+        <p style="color: rgb(199, 100, 64);">
+          Existing ${transactionType} Approvals: ${uniqueApprovalCount}
+        </p>
+        ${tableHtml}
+        <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+          <button
+            style="
+              padding: 8px;
+              background: rgb(119, 91, 21);
+              color: rgb(201, 255, 251);
+              border: 1px solid #333;
+              border-color: rgb(102, 69, 60);
+              border-radius: 5px;
+              cursor: pointer;
+            "
+            onmouseover="this.style.backgroundColor='rgb(50, 52, 51)'"
+            onmouseout="this.style.backgroundColor='rgb(119, 91, 21)'"
+            onclick="handleGroupApproval('${txSig}')"
+          >
+            Approve Kick Tx
+          </button>
+        </div>
+      </div>
     `
     return approvalButtonHtml
   }
-
-  if (transactionType === `GROUP_BAN`){
-
+  
+  if (transactionType === "GROUP_BAN") {
     const approvalButtonHtml = `
-    <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
-    <h2 style="color:rgb(189, 40, 40);">Existing Ban Approvals: ${existingApprovalCount}</h2>
-      <button 
-          style="padding: 8px; background:rgb(54, 7, 7); color:rgb(201, 255, 251) ;  border: 1px solid #333; border-color:rgb(204, 94, 94); border-radius: 5px; cursor: pointer;"
-          onmouseover="this.style.backgroundColor='rgb(50, 52, 51) '"
-          onmouseout="this.style.backgroundColor='rgb(54, 7, 7) '"
-          onclick="handleGroupApproval('${txSig}')">
-        Approve Ban Tx
-      </button>
-    </div>
+      <div style="display: flex; flex-direction: column; margin-top: 1em;">
+        <p style="color: rgb(189, 40, 40);">
+          Existing ${transactionType} Approvals: ${uniqueApprovalCount}
+        </p>
+        ${tableHtml}
+        <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+          <button
+            style="
+              padding: 8px;
+              background: rgb(54, 7, 7);
+              color: rgb(201, 255, 251);
+              border: 1px solid #333;
+              border-color: rgb(204, 94, 94);
+              border-radius: 5px;
+              cursor: pointer;
+            "
+            onmouseover="this.style.backgroundColor='rgb(50, 52, 51)'"
+            onmouseout="this.style.backgroundColor='rgb(54, 7, 7)'"
+            onclick="handleGroupApproval('${txSig}')"
+          >
+            Approve Ban Tx
+          </button>
+        </div>
+      </div>
     `
     return approvalButtonHtml
+  }
+  
+  if (transactionType === "ADD_GROUP_ADMIN") {
+    const approvalButtonHtml = `
+      <div style="display: flex; flex-direction: column; margin-top: 1em;">
+        <p style="color: rgb(40, 144, 189);">
+          Existing ${transactionType} Approvals: ${uniqueApprovalCount}
+        </p>
+        ${tableHtml}
+        <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+          <button
+            style="
+              padding: 8px;
+              background: rgb(8, 71, 69);
+              color: rgb(201, 255, 251);
+              border: 1px solid #333;
+              border-color: rgb(198, 252, 249);
+              border-radius: 5px;
+              cursor: pointer;
+            "
+            onmouseover="this.style.backgroundColor='rgb(17, 41, 29)'"
+            onmouseout="this.style.backgroundColor='rgb(8, 71, 69)'"
+            onclick="handleGroupApproval('${txSig}')"
+          >
+            Approve Add-Admin Tx
+          </button>
+        </div>
+      </div>
+    `
+    return approvalButtonHtml
+  }
+  
+  if (transactionType === "REMOVE_GROUP_ADMIN") {
+    const approvalButtonHtml = `
+      <div style="display: flex; flex-direction: column; margin-top: 1em;">
+        <p style="color: rgb(189, 40, 40);">
+          Existing ${transactionType} Approvals: ${uniqueApprovalCount}
+        </p>
+        ${tableHtml}
+        <div id="approval-button-container-${cardIdentifier}" style="margin-top: 1em;">
+          <button
+            style="
+              padding: 8px;
+              background: rgb(54, 7, 7);
+              color: rgb(201, 255, 251);
+              border: 1px solid #333;
+              border-color: rgb(204, 94, 94);
+              border-radius: 5px;
+              cursor: pointer;
+            "
+            onmouseover="this.style.backgroundColor='rgb(50, 52, 51)'"
+            onmouseout="this.style.backgroundColor='rgb(54, 7, 7)'"
+            onclick="handleGroupApproval('${txSig}')"
+          >
+            Approve Remove-Admin Tx
+          </button>
+        </div>
+      </div>
+    `
+    return approvalButtonHtml
+  }
+  
+}
+
+async function buildApprovalTableHtml(approvalTxs, getNameFunc) {
+  // Build a Map of adminAddress => one transaction (to handle multiple approvals from same admin)
+  const approvalMap = new Map()
+  for (const tx of approvalTxs) {
+    const adminAddr = tx.creatorAddress
+    if (!approvalMap.has(adminAddr)) {
+      approvalMap.set(adminAddr, tx)
+    }
+  }
+
+  // Turn the map into an array for iteration
+  const approvalArray = Array.from(approvalMap, ([adminAddr, tx]) => ({ adminAddr, tx }))
+
+  // Build table rows asynchronously, since we need getNameFromAddress
+  const tableRows = await Promise.all(
+    approvalArray.map(async ({ adminAddr, tx }) => {
+      let adminName
+      try {
+        adminName = await getNameFunc(adminAddr)
+      } catch (err) {
+        console.warn(`Error fetching name for ${adminAddr}:`, err)
+        adminName = null
+      }
+
+      const displayName =
+        adminName && adminName !== adminAddr
+          ? adminName
+          : "(No registered name)"
+
+      // Format the transaction timestamp
+      const dateStr = new Date(tx.timestamp).toLocaleString()
+
+      return `
+        <tr>
+          <td style="border: 1px solid rgb(255, 255, 255); padding: 4px; color: #234565">${displayName}</td>
+          <td style="border: 1px solid rgb(255, 254, 254); padding: 4px;">${dateStr}</td>
+        </tr>
+      `
+    })
+  )
+
+  // The total unique approvals = number of entries in approvalMap
+  const uniqueApprovalCount = approvalMap.size;
+
+  // 4) Wrap the table in a container with horizontal scroll:
+  //    1) max-width: 100% makes it fit the parent (card) width
+  //    2) overflow-x: auto allows scrolling if the table is too wide
+  const containerHtml = `
+    <div style="max-width: 100%; overflow-x: auto;">
+      <table style="border: 1px solid #ccc; border-collapse: collapse; width: 100%;">
+        <thead>
+          <tr style="background:rgba(6, 50, 59, 0.61);">
+            <th style="border: 1px solid #ffffff; padding: 4px;">Admin Name</th>
+            <th style="border: 1px solid #ffffff; padding: 4px;">Approval Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows.join("")}
+        </tbody>
+      </table>
+    </div>
+  `
+
+  // Return both the container-wrapped table and the count of unique approvals
+  return {
+    tableHtml: containerHtml,
+    uniqueApprovalCount
   }
 }
+
 
 const handleGroupApproval = async (pendingSignature) => {
   try{

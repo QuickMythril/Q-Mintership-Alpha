@@ -4,6 +4,7 @@ let adminGroupIDs = ["721", "1", "673"]
 // Settings to allow non-devmode development with 'live-server' module
 let baseUrl = ''
 let isOutsideOfUiDevelopment = false
+let nullAddress = 'QdSnUy6sUiEnaN87dWmE92g1uQjrvPgrWG'
 
 if (typeof qortalRequest === 'function') {
     console.log('qortalRequest is available as a function. Setting development mode to false and baseUrl to nothing.')
@@ -192,6 +193,13 @@ const userState = {
     isAdmin: false,
     isMinterAdmin: false,
     isForumAdmin: false
+}
+
+const validateQortalAddress = async (address) => {
+    // Regular expression to match Qortal addresses
+    const qortalAddressRegex = /^Q[a-zA-Z0-9]{32}$/
+    // Test the address against the regex
+    return qortalAddressRegex.test(address)
 }
 
 // USER-RELATED QORTAL CALLS ------------------------------------------
@@ -1458,6 +1466,120 @@ const createGroupKickTransaction = async (recipientAddress, adminPublicKey, grou
     }
 }
 
+const createAddGroupAdminTransaction = async (ownerPublicKey, groupId=694, member, txGroupId, fee) => {
+// If utilized to create a GROUP_APPROVAL tx, for MINTER group, then 'txCreatorPublicKey' takes the place of 'ownerPublicKey', and 'txGroupId' is required. Otherwise, txGroupId is 0 and ownerPublicKey is the tx creator, as creator = owner.
+    try {
+
+        let reference
+
+        if (!ownerPublicKey){
+            console.warn(`ownerPublicKey not passed, obtaining user public key...`)
+            const info = await getAddressInfo(userState.accountAddress)
+            reference = info.reference
+            ownerPublicKey = info.publicKey
+        }else {
+            // Fetch account reference correctly
+            const addr = await getAddressFromPublicKey(ownerPublicKey)
+            const accountInfo = await getAddressInfo(addr)
+            reference = accountInfo.reference
+        }
+
+        // Validate inputs before making the request
+        if (!ownerPublicKey || !reference) {
+            throw new Error("Missing required parameters for group invite transaction.")
+        }
+
+        const payload = {
+            timestamp: Date.now(), 
+            reference, 
+            fee,
+            txGroupId,  
+            ownerPublicKey, 
+            groupId, 
+            member
+        }
+        console.log("Sending ADD_GROUP_ADMIN transaction payload:", payload)
+        const response = await fetch(`${baseUrl}/groups/addadmin`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'text/plain',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+
+        if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`Failed to create transaction: ${response.status}, ${errorText}`)
+        }
+        const rawTransaction = await response.text()
+        console.log("Raw unsigned transaction created:", rawTransaction)
+        return rawTransaction
+
+    } catch (error) {
+        console.error("Error creating ADD_GROUP_ADMIN transaction:", error)
+        throw error
+    }
+}
+
+const createRemoveGroupAdminTransaction = async (ownerPublicKey, groupId=694, admin, txGroupId, fee) => {
+    console.log(`removeGroupAdminTxCreationInfo:`,ownerPublicKey, groupId, fee, txGroupId, admin)
+
+    try {
+        let reference
+
+        if (!ownerPublicKey){
+            console.warn(`ownerPublicKey not passed, obtaining user public key...`)
+            const info = getAddressInfo(userState.accountAddress)
+            reference = info.reference
+            ownerPublicKey = info.publicKey
+        } else {
+            // Fetch account reference correctly
+            const addr = await getAddressFromPublicKey(ownerPublicKey)
+            const accountInfo = await getAddressInfo(addr)
+            reference = accountInfo.reference
+            console.warn(`reference for removeTx:`, reference)
+            console.warn(`ownerPublicKey for removeTx`, ownerPublicKey)
+        }
+
+        // Validate inputs before making the request
+        if (!ownerPublicKey || !reference) {
+            throw new Error("Missing required parameters for transaction.")
+        }
+
+        const payload = {
+            timestamp: Date.now(), 
+            reference, 
+            fee,
+            txGroupId,  
+            ownerPublicKey, 
+            groupId, 
+            admin, 
+        }
+        console.log("Sending REMOVE_GROUP_ADMINtransaction payload:", payload)
+        const response = await fetch(`${baseUrl}/groups/removeadmin`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'text/plain',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+
+        if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`Failed to create transaction: ${response.status}, ${errorText}`)
+        }
+        const rawTransaction = await response.text()
+        console.log("Raw unsigned transaction created:", rawTransaction)
+        return rawTransaction
+
+    } catch (error) {
+        console.error("Error creating REMOVE_GROUP_ADMIN transaction:", error)
+        throw error
+    }
+}
+
 const createGroupApprovalTransaction = async (adminPublicKey, pendingSignature, txGroupId=0, fee=0.01) => {
 
     try {
@@ -1468,7 +1590,7 @@ const createGroupApprovalTransaction = async (adminPublicKey, pendingSignature, 
 
         // Validate inputs before making the request
         if (!adminPublicKey || !accountReference ) {
-            throw new Error("Missing required parameters for group invite transaction.")
+            throw new Error("Missing required parameters for transaction.")
         }
 
         const payload = {
@@ -1771,33 +1893,3 @@ const searchPendingTransactions = async (limit = 20, offset = 0) => {
     }
   }
   
-  
-  
-
-
-
-// export {
-//     userState,
-//     adminGroups,
-//     searchResourcesWithMetadata,
-//     searchResourcesWithStatus,
-//     getResourceMetadata,
-//     renderData,
-//     getProductDetails,
-//     getUserGroups,
-//     getUserAddress,
-//     login,
-//     timestampToHumanReadableDate,
-//     base64EncodeString,
-//     verifyUserIsAdmin,
-//     fetchAllDataByIdentifier,
-//     fetchOwnerAddressFromName,
-//     verifyAddressIsAdmin,
-//     uid,
-//     fetchAllGroups,
-//     getNameInfo,
-//     publishMultipleResources,
-//     getPublicKeyByName,
-//     objectToBase64,
-//     fetchMinterGroupAdmins
-// }
