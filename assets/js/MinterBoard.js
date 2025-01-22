@@ -658,8 +658,8 @@ const publishCard = async (cardIdentifierPrefix) => {
 
   const minterGroupData = await fetchMinterGroupMembers()
   const minterGroupAddresses = minterGroupData.map(m => m.member)
+  const userAddress = userState.accountAddress
 
-  const userAddress = userState.accountAddress;
   if (minterGroupAddresses.includes(userAddress)) {
     alert("You are already a Minter and cannot publish a new card!")
     return
@@ -991,7 +991,6 @@ const postComment = async (cardIdentifier) => {
       data64: base64CommentData,
     })
 
-    alert('Comment posted successfully!')
     commentInput.value = ''
   } catch (error) {
     console.error('Error posting comment:', error)

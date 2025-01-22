@@ -3,6 +3,7 @@ let minterGroupAddresses
 let minterAdminAddresses
 let isTest = false
 let isAddRemoveBoard = true
+let otherPublisher = false
 const addRemoveIdentifierPrefix = "QM-AR-card"
 const loadAddRemoveAdminPage = async () => {
     console.log("Loading Add/Remove Admin page...")
@@ -69,35 +70,6 @@ const loadAddRemoveAdminPage = async () => {
    
     document.getElementById("propose-promotion-button").addEventListener("click", async () => {
         try {
-            const fetchedCard = await fetchExistingARCard(addRemoveIdentifierPrefix)
-            if (fetchedCard) {
-                // An existing card is found
-                if (isTest) {
-                    const updateCard = confirm("You have already published a promotion card, would you like to update that one or publish a new one?")
-
-                    if (updateCard) {
-                        isExistingCard = true
-                        await loadCardIntoForm(existingCardData)
-                        alert("Edit your existing card and publish.")
-                    } else {
-                        alert("New Card Selected:  You can now create a new promotion card.")
-                        isExistingCard = false
-                        existingCardData = {}
-                        document.getElementById("publish-card-form").reset()
-                    }
-
-                } else {
-                    // Not in test mode, force editing
-                    alert("A card already exists. Publishing of multiple cards is not allowed. Please update your card.")
-                    isExistingCard = true
-                    await loadCardIntoForm(existingCardData)
-                }
-
-            } else {
-                // No existing card found
-                console.log("No existing card found. Creating a new card.")
-                isExistingCard = false
-            }
             // Show the form
             const publishCardView = document.getElementById("promotion-form-container")
             publishCardView.style.display = 'flex'
@@ -317,13 +289,12 @@ const handleProposeDemotion = async (adminName, adminAddress) => {
     const proposeButton = document.getElementById('propose-promotion-button')
     proposeButton.style.display = 'none'
     const fetchedCard = await fetchExistingARCard(addRemoveIdentifierPrefix, adminName)
+
         if (fetchedCard) {
             alert("A card already exists. Publishing of multiple cards is not allowed. Please update your card.")
             isExistingCard = true
             await loadCardIntoForm(fetchedCard)
         }
-        
-
     // Populate the form with the admin's name
     const nameInput = document.getElementById("minter-name-input")
     nameInput.value = adminName
@@ -342,37 +313,29 @@ const handleProposeDemotion = async (adminName, adminAddress) => {
 
   const fetchExistingARCard = async (cardIdentifierPrefix, minterName) => {
     try {
-      // 1. Fetch all cards with the specified prefix
       const response = await searchSimple(
         'BLOG_POST',
         `${cardIdentifierPrefix}`,
-        '', // Empty name to fetch all cards
+        '',
         0,
         0,
         '',
+        false,
         true
       )
-  
-      console.log(`SEARCH_QDN_RESOURCES response: ${JSON.stringify(response, null, 2)}`)
+      
+      console.log(`fetchExistingCard searchSimple response: ${JSON.stringify(response, null, 2)}`)
   
       if (!response || !Array.isArray(response) || response.length === 0) {
         console.log("No cards found.")
         return null
       }
   
-      // 2. Fetch minterGroupAddresses if not already fetched
-      if (!minterGroupAddresses) {
-        const groupData = await fetchMinterGroupMembers()
-        minterGroupAddresses = groupData.map((m) => m.member)
-      }
-  
-      // 3. Validate all fetched cards and check for duplicate `minterName`
       const validatedCards = await Promise.all(
         response.map(async (card) => {
           const isValid = await validateCardStructure(card)
   
           if (!isValid) return null
-  
           // Fetch full card data for validation
           const cardDataResponse = await qortalRequest({
             action: "FETCH_QDN_RESOURCE",
@@ -381,30 +344,28 @@ const handleProposeDemotion = async (adminName, adminAddress) => {
             identifier: card.identifier,
           })
   
-          // Check if `minterName` matches the input or is a duplicate
           if (cardDataResponse.minterName === minterName) {
             console.log(`Card with the same minterName found: ${minterName}`)
-            return {
-              card,
-              cardData: cardDataResponse,
+            if (cardDataResponse.creator === userState.accountName) {
+                console.log(`The user is the publisher, adding card...`)
+                return {
+                    card,
+                    cardData: cardDataResponse,
+                  }
+            } else {
+                console.warn(`Card found, but user is not the creator!`)
+                otherPublisher = true
+                return null
             }
           }
-  
           return null
         })
       )
-  
-      // 4. Filter out null results and check for duplicates
+      // Filter out null results and check for duplicates
       const matchingCards = validatedCards.filter((result) => result !== null)
-  
+
       if (matchingCards.length > 0) {
-        const { card, cardData } = matchingCards[0] // Use the first matching card
-  
-        // Determine if the card is a promotion card
-        // const nameInfo = await getNameInfo(cardData.minterName)
-        // const ownerAddress = nameInfo?.owner
-  
-        // Set flags and return the existing card data
+        const { card, cardData } = matchingCards[0] // Use the first matching card, which should be the first published for the minterName
         existingCardIdentifier = card.identifier
         existingCardData = cardData
         isExistingCard = true
@@ -429,11 +390,12 @@ const publishARCard = async (cardIdentifierPrefix) => {
     let minterName
     let address
     let isPromotionCard
-
+    
     if (potentialNameInfo.owner) {
         console.log(`MINTER NAME FOUND:`, minterNameInput)
         minterName = minterNameInput
         address = potentialNameInfo.owner
+
     } else {
         console.warn(`user input an address?...`, minterNameInput)
         if (!address){
@@ -447,6 +409,7 @@ const publishARCard = async (cardIdentifierPrefix) => {
             }
         }
         const checkForName = await getNameFromAddress(minterNameInput)
+
         if (checkForName) {
             minterName = checkForName
         } else if (!checkForName && address){
@@ -459,21 +422,32 @@ const publishARCard = async (cardIdentifierPrefix) => {
             return
         }
     }
-    
+    const exists = await fetchExistingARCard(cardIdentifierPrefix, minterName)
+
+    if (exists) {
+        alert(`An existing card was found, you must update it, two cards for the samme name cannot be published! Loading card data...`)
+        await loadCardIntoForm(existingCardData)
+        minterName = exists.minterName
+        const nameInfo = await getNameInfo(exists.minterName)
+        address = nameInfo.owner
+        isExistingCard = true
+    } else if (otherPublisher){
+        alert(`An existing card was found, but you are NOT the publisher, you may not publish duplicates, and you may not update a non-owned card! Please try again with another name, or use the existing card for ${minterNameInput}`)
+        return
+    }
+
     const minterGroupData = await fetchMinterGroupMembers()
     minterGroupAddresses = minterGroupData.map(m => m.member)
 
     const minterAdminGroupData = await fetchMinterGroupAdmins()
     minterAdminAddresses = minterAdminGroupData.map(m => m.member)
-  
-    if (minterGroupAddresses.includes(address)) {
-      isPromotionCard = true
-      console.warn(`address is a MINTER, this is a promotion card...`)
-    }
 
     if (minterAdminAddresses.includes(address)){
         isPromotionCard = false
         console.warn(`this is a DEMOTION`, address)
+    }else if (minterGroupAddresses.includes(address)) {
+      isPromotionCard = true
+      console.warn(`address is a MINTER, this is a promotion card...`)
     }
 
     if (!minterAdminAddresses.includes(address) && !minterGroupAddresses.includes(address)) {
@@ -491,7 +465,7 @@ const publishARCard = async (cardIdentifierPrefix) => {
     if (!header || !content) {
         alert("Header and content are required!")
         return
-      }
+    }
   
     const cardIdentifier = isExistingCard ? existingCardIdentifier : `${cardIdentifierPrefix}-${await uid()}`
     const pollName = `${cardIdentifier}-poll`
@@ -537,6 +511,10 @@ const publishARCard = async (cardIdentifierPrefix) => {
       if (isExistingCard){
         alert("Card Updated Successfully! (No poll updates are possible at this time...)")
         isExistingCard = false
+      }
+
+      if (isPromotionCard){
+        isPromotionCard = false
       }
   
       document.getElementById("publish-card-form").reset()
@@ -763,36 +741,37 @@ const createARCardHTML = async (cardData, pollResults, cardIdentifier, commentCo
     const minterAdmins = await fetchMinterGroupAdmins()
 
     let showPromotionCard = false
-    showPromotionCard = await fallbackMinterCheck(minterName, minterGroupMembers, minterAdmins)
+    // showPromotionCard = await fallbackMinterCheck(minterName, minterGroupMembers, minterAdmins)
 
-    // if (typeof promotionCard === 'boolean') {
-    //   showPromotionCard = promotionCard;
-    // } else if (typeof promotionCard === 'string') {
-    //   // Could be "true" or "false" or something else
-    //   const lower = promotionCard.trim().toLowerCase()
-    //   if (lower === "true") {
-    //     showPromotionCard = true
-    //   } else if (lower === "false") {
-    //     showPromotionCard = false
-    //   } else {
-    //     // Unexpected string => fallback
-    //     console.warn(`Unexpected string in promotionCard="${promotionCard}"`)
-    //     showPromotionCard = await fallbackMinterCheck(minterName, minterGroupMembers)
-    //   }
-    // } else if (promotionCard == null) {
-    //   // null or undefined => fallback check
-    //   console.warn(`No promotionCard field in card data, doing manual check...`)
-    //   showPromotionCard = await fallbackMinterCheck(minterName, minterGroupMembers)
-    // } else {
-    //   // If it’s an object or something else weird => fallback
-    //   console.warn(`promotionCard has unexpected type, fallback...`)
-    //   showPromotionCard = await fallbackMinterCheck(minterName, minterGroupMembers)
-    // }
+    if (typeof promotionCard === 'boolean') {
+      showPromotionCard = promotionCard;
+    } else if (typeof promotionCard === 'string') {
+      // Could be "true" or "false" or something else
+      const lower = promotionCard.trim().toLowerCase()
+      if (lower === "true") {
+        showPromotionCard = true
+      } else if (lower === "false") {
+        showPromotionCard = false
+      } else {
+        // Unexpected string => fallback
+        console.warn(`Unexpected string in promotionCard="${promotionCard}"`)
+        showPromotionCard = await fallbackMinterCheck(minterName, minterGroupMembers)
+      }
+    } else if (promotionCard == null) {
+      // null or undefined => fallback check
+      console.warn(`No promotionCard field in card data, doing manual check...`)
+      showPromotionCard = await fallbackMinterCheck(minterName, minterGroupMembers)
+    } else {
+      // If it’s an object or something else weird => fallback
+      console.warn(`promotionCard has unexpected type, fallback...`)
+      showPromotionCard = await fallbackMinterCheck(minterName, minterGroupMembers)
+    }
 
     let cardColorCode = (showPromotionCard) ? 'rgb(17, 44, 46)' : 'rgb(57, 11, 13)'
   
     const promotionDemotionHtml = (showPromotionCard) ? `
       <div class="support-header"><h5> REGARDING (Promotion): </h5></div>
+      ${minterAvatar}
       <h3>${minterName}</h3>` :
       `
       <div class="support-header"><h5> REGARDING (Demotion): </h5></div>
@@ -807,8 +786,8 @@ const createARCardHTML = async (cardData, pollResults, cardIdentifier, commentCo
     createModal('links')
     createModal('poll-details')
   
-    let actionsHtml
-    let altText
+    let actionsHtml = ''
+    let altText = ''
     const verifiedName = await validateMinterName(minterName)
   
     if (verifiedName) {
@@ -847,7 +826,7 @@ const createARCardHTML = async (cardData, pollResults, cardIdentifier, commentCo
       }
       
     } else {
-      console.log(`name could not be validated, assuming topic card (or some other issue with name validation) for removalActions`)
+      console.warn(`name could not be validated, not setting actionsHtml`)
       actionsHtml = ''
     }
   

@@ -802,9 +802,9 @@ const searchAllWithOffset = async (service, query, limit, offset, room) => {
     }
 }
 // NOTE - This function does a search and will return EITHER AN ARRAY OR A SINGLE OBJECT. if you want to guarantee a single object, pass 1 as limit. i.e. await searchSimple(service, identifier, "", 1) will return a single object.
-const searchSimple = async (service, identifier, name, limit = 1500, offset = 0, room='', reverse='true') => {
+const searchSimple = async (service, identifier, name, limit=1500, offset=0, room='', reverse=true, prefixOnly=true) => {
     try {
-      let urlSuffix = `service=${service}&identifier=${identifier}&name=${name}&prefix=true&limit=${limit}&offset=${offset}&reverse=${reverse}`
+      let urlSuffix = `service=${service}&identifier=${identifier}&name=${name}&prefix=true&limit=${limit}&offset=${offset}&reverse=${reverse}&prefix=${prefixOnly}`
   
       if (name && !identifier && !room) {
         console.log('name only searchSimple', name)
