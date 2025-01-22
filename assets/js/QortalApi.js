@@ -48,12 +48,12 @@ const timestampToHumanReadableDate = async(timestamp) => {
     const date = new Date(timestamp)
     const day = date.getDate()
     const month = date.getMonth() + 1
-    const year = date.getFullYear() - 2000
+    const year = date.getFullYear()
     const hours = date.getHours()
-    const minutes = date.getMinutes()
-    const seconds = date.getSeconds()
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
 
-    const formattedDate = `${month}.${day}.${year}@${hours}:${minutes}:${seconds}`
+    const formattedDate = `${year}.${month}.${day}@${hours}:${minutes}:${seconds}`
     console.log('Formatted date:', formattedDate)
     return formattedDate
 }
@@ -1226,7 +1226,7 @@ const renderData = async (service, name, identifier) => {
 
     } catch (error) {
         console.error('Error rendering data:', error)
-        // Return the custom message when there’s an error or invalid data
+        // Return the custom message when there's an error or invalid data
         return 'Requested data is either missing or still being obtained from QDN... please try again in a short time.'
     }
 }
@@ -1347,7 +1347,7 @@ const processTransaction = async (signedTransaction) => {
         const rawText = await response.text();
         console.log("Raw text from server (version 2 means JSON string in text):", rawText)
   
-        // Attempt to parse if it’s indeed JSON
+        // Attempt to parse if it's indeed JSON
         let parsed;
         try {
           parsed = JSON.parse(rawText);

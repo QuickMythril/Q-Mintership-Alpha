@@ -30,6 +30,13 @@ const loadMinterBoardPage = async () => {
       <p style="font-size: 1.25em;"> Publish a Minter Card with Information, and obtain and view the support of the community. Welcome to the Minter Board!</p>
       <button id="publish-card-button" class="publish-card-button" style="margin: 20px; padding: 10px; background-color: ${publishButtonColor}">Publish Minter Card</button>
       <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Cards</button>
+      <select id="sort-select" style="margin-left: 10px; padding: 5px;">
+        <option value="newest" selected>Sort by Date</option>
+        <option value="name">Sort by Name</option>
+        <option value="recent-comments">Newest Comments</option>
+        <option value="least-votes">Least Votes</option>
+        <option value="most-votes">Most Votes</option>
+      </select>
       <div id="cards-container" class="cards-container" style="margin-top: 20px;"></div>
       <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
         <form id="publish-card-form">
@@ -119,6 +126,12 @@ const loadMinterBoardPage = async () => {
     event.preventDefault()
     await publishCard(minterCardIdentifierPrefix)
   })
+
+  document.getElementById("sort-select").addEventListener("change", async () => {
+    // Re-load the cards whenever user chooses a new sort option.
+    await loadCards(minterCardIdentifierPrefix)
+  })
+
   await featureTriggerCheck()
   await loadCards(minterCardIdentifierPrefix)
 }
@@ -280,6 +293,159 @@ const loadCards = async (cardIdentifierPrefix) => {
     }
     const finalCards = await processMinterCards(validCards)
 
+    // finalCards is already sorted by newest (timestamp) by processMinterCards. 
+    // We'll re-sort if "Name" or "Recent Comments" is selected.
+
+    // Grab the selected sort from the dropdown (if it exists).
+    let selectedSort = 'newest'
+    const sortSelect = document.getElementById('sort-select')
+    if (sortSelect) {
+      selectedSort = sortSelect.value
+    }
+
+    if (selectedSort === 'name') {
+	      // Sort alphabetically by the creator's name
+      finalCards.sort((a, b) => {
+        const nameA = a.name?.toLowerCase() || ''
+        const nameB = b.name?.toLowerCase() || ''
+        return nameA.localeCompare(nameB)
+      })
+    } else if (selectedSort === 'recent-comments') {
+	      // We need each card's newest comment timestamp for sorting
+      for (let card of finalCards) {
+        card.newestCommentTimestamp = await getNewestCommentTimestamp(card.identifier)
+      }
+      // Then sort descending by newest comment
+      finalCards.sort((a, b) =>
+        (b.newestCommentTimestamp || 0) - (a.newestCommentTimestamp || 0)
+      )
+    } else if (selectedSort === 'least-votes') {
+      // For each card, fetch its poll data so we know how many admin + minter votes it has.
+      // Store those values on the card object so we can sort on them.
+      // Sort ascending by admin votes; if there's a tie, sort ascending by minter votes.
+      const minterGroupMembers = await fetchMinterGroupMembers()
+      const minterAdmins = await fetchMinterGroupAdmins()
+      // For each card, fetch the poll data & store counts on the card object.
+      for (const card of finalCards) {
+        try {
+          // We must fetch the card data from QDN to get the `poll` name
+          const cardDataResponse = await qortalRequest({
+            action: "FETCH_QDN_RESOURCE",
+            name: card.name,
+            service: "BLOG_POST",
+            identifier: card.identifier,
+          })
+          // If the card or poll is missing, skip
+          if (!cardDataResponse || !cardDataResponse.poll) {
+            card._adminVotes = 0
+            card._adminYes = 0
+            card._minterVotes = 0
+            card._minterYes = 0
+            continue
+          }
+          const pollResults = await fetchPollResults(cardDataResponse.poll)
+          const {
+            adminYes,
+            adminNo,
+            minterYes,
+            minterNo
+          } = await processPollData(
+            pollResults,
+            minterGroupMembers,
+            minterAdmins,
+            cardDataResponse.creator,
+            card.identifier
+          )
+          // Store the totals so we can sort on them
+          card._adminVotes = adminYes + adminNo
+          card._adminYes = adminYes
+          card._minterVotes = minterYes + minterNo
+          card._minterYes = minterYes
+        } catch (error) {
+          console.warn(`Error fetching or processing poll for card ${card.identifier}:`, error)
+          // If something fails, default to zero so it sorts "lowest"
+          card._adminVotes = 0
+          card._adminYes = 0
+          card._minterVotes = 0
+          card._minterYes = 0
+        }
+      }
+      // Now that each card has _adminVotes + _minterVotes, do an ascending sort:
+      finalCards.sort((a, b) => {
+        // admin votes ascending
+        const diffAdminTotal = a._adminVotes - b._adminVotes
+        if (diffAdminTotal !== 0) return diffAdminTotal
+        // admin YES ascending
+        const diffAdminYes = a._adminYes - b._adminYes
+        if (diffAdminYes !== 0) return diffAdminYes
+        // minter votes ascending
+        const diffMinterTotal = a._minterVotes - b._minterVotes
+        if (diffMinterTotal !== 0) return diffMinterTotal
+        // minter YES ascending
+        return a._minterYes - b._minterYes
+      })
+    } else if (selectedSort === 'most-votes') {
+      // Fetch poll data & store admin + minter votes as before.
+      // Sort descending by admin votes; if there's a tie, sort descending by minter votes.
+      const minterGroupMembers = await fetchMinterGroupMembers()
+      const minterAdmins = await fetchMinterGroupAdmins()
+      for (const card of finalCards) {
+        try {
+          const cardDataResponse = await qortalRequest({
+            action: "FETCH_QDN_RESOURCE",
+            name: card.name,
+            service: "BLOG_POST",
+            identifier: card.identifier,
+          })
+          if (!cardDataResponse || !cardDataResponse.poll) {
+            card._adminVotes = 0
+            card._adminYes = 0
+            card._minterVotes = 0
+            card._minterYes = 0
+            continue
+          }
+          const pollResults = await fetchPollResults(cardDataResponse.poll)
+          const {
+            adminYes,
+            adminNo,
+            minterYes,
+            minterNo
+          } = await processPollData(
+            pollResults,
+            minterGroupMembers,
+            minterAdmins,
+            cardDataResponse.creator,
+            card.identifier
+          )
+          card._adminVotes = adminYes + adminNo
+          card._adminYes = adminYes
+          card._minterVotes = minterYes + minterNo
+          card._minterYes = minterYes
+        } catch (error) {
+          console.warn(`Error fetching or processing poll for card ${card.identifier}:`, error)
+          card._adminVotes = 0
+          card._adminYes = 0
+          card._minterVotes = 0
+          card._minterYes = 0
+        }
+      }
+      // Sort descending by admin votes, then minter votes
+      finalCards.sort((a, b) => {
+        // admin votes descending
+        const diffAdminTotal = b._adminVotes - a._adminVotes
+        if (diffAdminTotal !== 0) return diffAdminTotal
+        // admin YES descending
+        const diffAdminYes = b._adminYes - a._adminYes
+        if (diffAdminYes !== 0) return diffAdminYes
+        // minter votes descending
+        const diffMinterTotal = b._minterVotes - a._minterVotes
+        if (diffMinterTotal !== 0) return diffMinterTotal
+        // minter YES descending
+        return b._minterYes - a._minterYes
+      })
+    }
+    // else 'newest' => do nothing, finalCards stays in newest-first order
+
     // Display skeleton cards immediately
     cardsContainer.innerHTML = ""
     finalCards.forEach(card => {
@@ -308,10 +474,13 @@ const loadCards = async (cardIdentifierPrefix) => {
           removeSkeleton(card.identifier)
           return
         }
-        const pollPublisherPublicKey = await getPollPublisherPublicKey(cardDataResponse.poll)
-        const cardPublisherPublicKey = await getPublicKeyByName(card.name)
 
-        if (pollPublisherPublicKey != cardPublisherPublicKey) {
+        // Getting the poll owner address uses the same API call as public key, so takes the same time, but address will be needed later.
+        const pollPublisherAddress = await getPollOwnerAddress(cardDataResponse.poll)
+        // Getting the card publisher address to compare instead should cause faster loading, since getting the public key by name first gets the address then converts it
+        const cardPublisherAddress = await fetchOwnerAddressFromName(card.name)
+
+        if (pollPublisherAddress != cardPublisherAddress) {
           console.warn(`not displaying card, QuickMythril pollHijack attack found! Discarding card with identifier: ${card.identifier}`)
           removeSkeleton(card.identifier)
           return
@@ -346,7 +515,7 @@ const loadCards = async (cardIdentifierPrefix) => {
         const finalCardHTML = isARBoard ? // If we're calling from the ARBoard, we will create HTML with a different function.
         await createARCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, bgColor) 
         : 
-        await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, bgColor)
+        await createCardHTML(cardDataResponse, pollResults, card.identifier, commentCount, cardUpdatedTime, bgColor, cardPublisherAddress)
         replaceSkeleton(card.identifier, finalCardHTML)
 
       } catch (error) {
@@ -576,7 +745,8 @@ const processPollData= async (pollData, minterGroupMembers, minterAdmins, creato
       totalNo: 0,
       totalYesWeight: 0,
       totalNoWeight: 0,
-      detailsHtml: `<p>Poll data is invalid or missing.</p>`
+      detailsHtml: `<p>Poll data is invalid or missing.</p>`,
+      userVote: null
     }
   }
 
@@ -595,6 +765,7 @@ const processPollData= async (pollData, minterGroupMembers, minterAdmins, creato
   let adminYes = 0, adminNo = 0
   let minterYes = 0, minterNo = 0
   let yesWeight = 0, noWeight = 0
+  let userVote = null
 
   for (const w of pollData.voteWeights) {
     if (w.optionName.toLowerCase() === 'yes') {
@@ -608,6 +779,10 @@ const processPollData= async (pollData, minterGroupMembers, minterAdmins, creato
     const optionIndex = vote.optionIndex; // 0 => yes, 1 => no
     const voterPublicKey = vote.voterPublicKey
     const voterAddress = await getAddressFromPublicKey(voterPublicKey)
+
+    if (voterAddress === userState.accountAddress) {
+      userVote = optionIndex
+    }
 
     if (optionIndex === 0) {
       if (adminAddresses.includes(voterAddress)) {
@@ -703,7 +878,8 @@ const processPollData= async (pollData, minterGroupMembers, minterAdmins, creato
     totalNo,
     totalYesWeight: totalMinterAndAdminYesWeight,
     totalNoWeight: totalMinterAndAdminNoWeight,
-    detailsHtml
+    detailsHtml,
+    userVote
   }
 }
 
@@ -1593,9 +1769,28 @@ const getMinterAvatar = async (minterName) => {
   }
 }
 
+const getNewestCommentTimestamp = async (cardIdentifier) => {
+  try {
+    // fetchCommentsForCard returns resources each with at least 'created' or 'updated'
+    const comments = await fetchCommentsForCard(cardIdentifier)
+    if (!comments || comments.length === 0) {
+	      // No comments => fallback to 0 (or card's own date, if you like)
+      return 0
+    }
+    // The newest can be determined by comparing 'updated' or 'created'
+    const newestTimestamp = comments.reduce((acc, c) => {
+      const cTime = c.updated || c.created || 0
+      return (cTime > acc) ? cTime : acc
+    }, 0)
+    return newestTimestamp
+  } catch (err) {
+    console.error('Failed to get newest comment timestamp:', err)
+    return 0
+  }
+}
 
 // Create the overall Minter Card HTML -----------------------------------------------
-const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, bgColor) => {
+const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, bgColor, address) => {
   const { header, content, links, creator, timestamp, poll } = cardData
   const formattedDate = cardUpdatedTime ? new Date(cardUpdatedTime).toLocaleString() : new Date(timestamp).toLocaleString()
   const avatarHtml = await getMinterAvatar(creator)
@@ -1607,7 +1802,7 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
 
   const minterGroupMembers = await fetchMinterGroupMembers()
   const minterAdmins = await fetchMinterGroupAdmins()
-  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0, detailsHtml } = await processPollData(pollResults, minterGroupMembers, minterAdmins, creator, cardIdentifier)
+  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0, detailsHtml, userVote } = await processPollData(pollResults, minterGroupMembers, minterAdmins, creator, cardIdentifier)
   createModal('links')
   createModal('poll-details')
 
@@ -1616,12 +1811,18 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
 
   let finalBgColor = bgColor
   let invitedText = "" // for "INVITED" label if found
+  const addressInfo = await getAddressInfo(address)
+  const penaltyText = addressInfo.blocksMintedPenalty == 0 ? '' : '<p>(has Blocks Penalty)<p>'
+  const adjustmentText = addressInfo.blocksMintedAdjustment == 0 ? '' : '<p>(has Blocks Adjustment)<p>'
 
   try {
-    const minterAddress = await fetchOwnerAddressFromName(creator)
-    const invites = await fetchGroupInvitesByAddress(minterAddress)
+    const invites = await fetchGroupInvitesByAddress(address)
     const hasMinterInvite = invites.some((invite) => invite.groupId === 694)
-    if (hasMinterInvite) {
+    if (userVote === 0) {
+      finalBgColor = "rgba(0, 192, 0, 0.3)"; // or any green you want
+    } else if (userVote === 1) {
+      finalBgColor = "rgba(192, 0, 0, 0.3)"; // or any red you want
+    } else if (hasMinterInvite) {
       // If so, override background color & add an "INVITED" label
       finalBgColor = "black"; 
       invitedText = `<h4 style="color: gold; margin-bottom: 0.5em;">INVITED</h4>`
@@ -1651,9 +1852,9 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
   <div class="minter-card" style="background-color: ${finalBgColor}">
     <div class="minter-card-header">
       ${avatarHtml}
-      <h3>${creator}</h3>
+      <h3>${creator} - Level ${addressInfo.level}</h3>
       <p>${header}</p>
-      ${invitedText}
+      ${penaltyText}${adjustmentText}${invitedText}
     </div>
     <div class="support-header"><h5>USER'S POST</h5></div>
     <div class="info">

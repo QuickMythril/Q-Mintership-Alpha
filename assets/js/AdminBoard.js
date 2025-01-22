@@ -76,6 +76,13 @@ const loadAdminBoardPage = async () => {
     <p> More functionality will be added over time. One of the first features will be the ability to output the existing card data 'decisions', to a json formatted list in order to allow crowetic to run his script easily until the final Mintership proposal changes are completed, and the MINTER group is transferred to 'null'.</p>
     <button id="publish-card-button" class="publish-card-button" style="margin: 20px; padding: 10px;">Publish Encrypted Card</button>
     <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Cards</button>
+    <select id="sort-select" style="margin-left: 10px; padding: 5px;">
+      <option value="newest" selected>Sort by Date</option>
+      <option value="name">Sort by Name</option>
+      <option value="recent-comments">Newest Comments</option>
+      <option value="least-votes">Least Votes</option>
+      <option value="most-votes">Most Votes</option>
+    </select>
     <div class="show-card-checkbox" style="margin-top: 1em;">
       <input type="checkbox" id="admin-show-hidden-checkbox" name="adminHidden" />
       <label for="admin-show-hidden-checkbox">Show User-Hidden Cards?</label>
@@ -171,6 +178,11 @@ const loadAdminBoardPage = async () => {
     const isTopicChecked = document.getElementById("topic-checkbox").checked
     // Pass that boolean to publishEncryptedCard
     await publishEncryptedCard(isTopicChecked)
+  })
+
+  document.getElementById("sort-select").addEventListener("change", async () => {
+    // Re-load the cards whenever user chooses a new sort option.
+    await fetchAllEncryptedCards()
   })
 
   createScrollToTopButton()
@@ -404,12 +416,125 @@ const fetchAllEncryptedCards = async (isRefresh = false) => {
     // Convert the map into an array of final cards
     const finalCards = Array.from(mostRecentCardsMap.values());
 
-    // Sort cards by timestamp (most recent first)
-    finalCards.sort((a, b) => {
-      const timestampA = a.card.updated || a.card.created || 0
-      const timestampB = b.card.updated || b.card.created || 0
-      return timestampB - timestampA;
-    })
+    let selectedSort = 'newest'
+    const sortSelect = document.getElementById('sort-select')
+    if (sortSelect) {
+      selectedSort = sortSelect.value
+    }
+
+    if (selectedSort === 'name') {
+	      // Sort alphabetically by the minter's name
+      finalCards.sort((a, b) => {
+        const nameA = a.decryptedCardData.minterName?.toLowerCase() || ''
+        const nameB = b.decryptedCardData.minterName?.toLowerCase() || ''
+        return nameA.localeCompare(nameB)
+      })
+    } else if (selectedSort === 'recent-comments') {
+	      // We need each card's newest comment timestamp for sorting
+      for (let card of finalCards) {
+        card.newestCommentTimestamp = await getNewestAdminCommentTimestamp(card.card.identifier)
+      }
+      // Then sort descending by newest comment
+      finalCards.sort((a, b) =>
+        (b.newestCommentTimestamp || 0) - (a.newestCommentTimestamp || 0)
+      )
+    } else if (selectedSort === 'least-votes') {
+      // TODO: Add the logic to sort by LEAST total ADMIN votes, then totalYesWeight
+      const minterGroupMembers = await fetchMinterGroupMembers()
+      const minterAdmins = await fetchMinterGroupAdmins()
+      for (const finalCard of finalCards) {
+        try {
+          const pollName = finalCard.decryptedCardData.poll
+          // If card or poll is missing, default to zero
+          if (!pollName) {
+            finalCard._adminTotalVotes = 0
+            finalCard._yesWeight = 0
+            continue
+          }
+          const pollResults = await fetchPollResults(pollName)
+          if (!pollResults || pollResults.error) {
+            finalCard._adminTotalVotes = 0
+            finalCard._yesWeight = 0
+            continue
+          }
+          // Pull only the adminYes/adminNo/totalYesWeight from processPollData
+          const {
+            adminYes,
+            adminNo,
+            totalYesWeight
+          } = await processPollData(
+            pollResults,
+            minterGroupMembers,
+            minterAdmins,
+            finalCard.decryptedCardData.creator,
+            finalCard.card.identifier
+          )
+          finalCard._adminTotalVotes = adminYes + adminNo
+          finalCard._yesWeight = totalYesWeight
+        } catch (error) {
+          console.warn(`Error fetching or processing poll for card ${finalCard.card.identifier}:`, error)
+          finalCard._adminTotalVotes = 0
+          finalCard._yesWeight = 0
+        }
+      }
+      // Sort ascending by (adminYes + adminNo), then descending by totalYesWeight
+      finalCards.sort((a, b) => {
+        const diffAdminTotal = a._adminTotalVotes - b._adminTotalVotes
+        if (diffAdminTotal !== 0) return diffAdminTotal
+        // If there's a tie, show the card with higher yesWeight first
+        return b._yesWeight - a._yesWeight
+      })
+    } else if (selectedSort === 'most-votes') {
+      // TODO: Add the logic to sort by MOST total ADMIN votes, then totalYesWeight
+      const minterGroupMembers = await fetchMinterGroupMembers()
+      const minterAdmins = await fetchMinterGroupAdmins()
+      for (const finalCard of finalCards) {
+        try {
+          const pollName = finalCard.decryptedCardData.poll
+          if (!pollName) {
+            finalCard._adminTotalVotes = 0
+            finalCard._yesWeight = 0
+            continue
+          }
+          const pollResults = await fetchPollResults(pollName)
+          if (!pollResults || pollResults.error) {
+            finalCard._adminTotalVotes = 0
+            finalCard._yesWeight = 0
+            continue
+          }
+          const {
+            adminYes,
+            adminNo,
+            totalYesWeight
+          } = await processPollData(
+            pollResults,
+            minterGroupMembers,
+            minterAdmins,
+            finalCard.decryptedCardData.creator,
+            finalCard.card.identifier
+          )
+          finalCard._adminTotalVotes = adminYes + adminNo
+          finalCard._yesWeight = totalYesWeight
+        } catch (error) {
+          console.warn(`Error fetching or processing poll for card ${finalCard.card.identifier}:`, error)
+          finalCard._adminTotalVotes = 0
+          finalCard._yesWeight = 0
+        }
+      }
+      // Sort descending by (adminYes + adminNo), then descending by totalYesWeight
+      finalCards.sort((a, b) => {
+        const diffAdminTotal = b._adminTotalVotes - a._adminTotalVotes
+        if (diffAdminTotal !== 0) return diffAdminTotal
+        return b._yesWeight - a._yesWeight
+      })
+    } else {
+      // Sort cards by timestamp (most recent first)
+      finalCards.sort((a, b) => {
+        const timestampA = a.card.updated || a.card.created || 0
+        const timestampB = b.card.updated || b.card.created || 0
+        return timestampB - timestampA;
+      })
+    }
 
     encryptedCardsContainer.innerHTML = ""
 
@@ -675,7 +800,7 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
       publicKeys: verifiedAdminPublicKeys
     })
 
-    // Possibly create a poll if it’s a brand new card
+    // Possibly create a poll if it's a brand new card
     if (!isUpdateCard) {
       await qortalRequest({
         action: "CREATE_POLL",
@@ -1080,6 +1205,23 @@ const handleBanMinter = async (minterName) => {
   }
 }
 
+const getNewestAdminCommentTimestamp = async (cardIdentifier) => {
+  try {
+    const comments = await fetchEncryptedComments(cardIdentifier)
+    if (!comments || comments.length === 0) {
+      return 0
+    }
+    const newestTimestamp = comments.reduce((acc, comment) => {
+      const cTime = comment.updated || comment.created || 0
+      return cTime > acc ? cTime : acc
+    }, 0)
+    return newestTimestamp
+  } catch (err) {
+    console.error('Failed to get newest comment timestamp:', err)
+    return 0
+  }
+}
+
 // Create the overall Minter Card HTML -----------------------------------------------
 const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, commentCount) => {
   const { minterName, header, content, links, creator, timestamp, poll, topicMode } = cardData
@@ -1113,29 +1255,41 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
 
   const minterOrTopicHtml = ((showTopic) || (isUndefinedUser)) ? `
     <div class="support-header"><h5> REGARDING (Topic): </h5></div>
-    <h3>${minterName}</h3>` :
+    <h3>${minterName}` :
     `
     <div class="support-header"><h5> REGARDING (Name): </h5></div>
     ${minterAvatar}
-    <h3>${minterName}</h3>`
+    <h3>${minterName}`
 
   const minterGroupMembers = await fetchMinterGroupMembers()
   const minterAdmins = await fetchMinterGroupAdmins()
-  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0, detailsHtml } = await processPollData(pollResults, minterGroupMembers, minterAdmins, creator, cardIdentifier)
+  const { adminYes = 0, adminNo = 0, minterYes = 0, minterNo = 0, totalYes = 0, totalNo = 0, totalYesWeight = 0, totalNoWeight = 0, detailsHtml, userVote = null } = await processPollData(pollResults, minterGroupMembers, minterAdmins, creator, cardIdentifier)
 
   createModal('links')
   createModal('poll-details')
 
   let showRemoveHtml
-  let altText
+  let altText = ''
+  let penaltyText = ''
+  let adjustmentText = ''
   const verifiedName = await validateMinterName(minterName)
+  let levelText = '</h3>'
 
   if (verifiedName) {
     const accountInfo = await getNameInfo(verifiedName)
     const accountAddress = accountInfo.owner
+    const addressInfo = await getAddressInfo(accountAddress)
+    levelText = ` - Level ${addressInfo.level}</h3>`
     console.log(`name is validated, utilizing for removal features...${verifiedName}`)
+    penaltyText = addressInfo.blocksMintedPenalty == 0 ? '' : '<p>(has Blocks Penalty)<p>'
+    adjustmentText = addressInfo.blocksMintedAdjustment == 0 ? '' : '<p>(has Blocks Adjustment)<p>'
     const removeActionsHtml = await checkAndDisplayRemoveActions(adminYes, verifiedName, cardIdentifier)
     showRemoveHtml = removeActionsHtml
+    if (userVote === 0) {
+      cardColorCode = "rgba(0, 192, 0, 0.3)"; // or any green you want
+    } else if (userVote === 1) {
+      cardColorCode = "rgba(192, 0, 0, 0.3)"; // or any red you want
+    }
     
     if (banTransactions.some((banTx) => banTx.groupId === 694 && banTx.offender === accountAddress)){
       console.warn(`account was already banned, displaying as such...`)
@@ -1176,9 +1330,9 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
       <h2 class="support-header"> Created By: </h2>
       ${creatorAvatar}
       <h2>${creator}</h2>
-      ${minterOrTopicHtml}
+      ${minterOrTopicHtml}${levelText}
       <p>${header}</p>
-      ${altText}
+      ${penaltyText}${adjustmentText}${altText}
     </div>
     <div class="info">
       ${content}
