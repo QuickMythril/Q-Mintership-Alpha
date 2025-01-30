@@ -10,8 +10,8 @@ let isTopic = false
 let attemptLoadAdminDataCount = 0
 let adminMemberCount = 0
 let adminPublicKeys = []
-let kickTransactions = []
-let banTransactions = []
+// let kickTransactions = []
+// let banTransactions = []
 let adminBoardState = {
   kickedCards: new Set(),  // store identifiers 
   bannedCards: new Set(),  // likewise
@@ -76,14 +76,14 @@ const loadAdminBoardPage = async () => {
     <p> More functionality will be added over time. One of the first features will be the ability to output the existing card data 'decisions', to a json formatted list in order to allow crowetic to run his script easily until the final Mintership proposal changes are completed, and the MINTER group is transferred to 'null'.</p>
     <button id="publish-card-button" class="publish-card-button" style="margin: 20px; padding: 10px;">Publish Encrypted Card</button>
     <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Cards</button>
-    <select id="sort-select" style="margin-left: 10px; padding: 5px;">
+    <select id="sort-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color:rgb(70, 106, 105); background-color: black;">
       <option value="newest" selected>Sort by Date</option>
       <option value="name">Sort by Name</option>
       <option value="recent-comments">Newest Comments</option>
       <option value="least-votes">Least Votes</option>
       <option value="most-votes">Most Votes</option>
     </select>
-    <select id="time-range-select" style="margin-left: 10px; padding: 5px;">
+    <select id="time-range-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color: white; background-color: black;">
         <option value="0">Show All</option>
         <option value="1">Last 1 day</option>
         <option value="7">Last 7 days</option>
@@ -98,7 +98,7 @@ const loadAdminBoardPage = async () => {
     </div>
     <div id="encrypted-cards-container" class="cards-container" style="margin-top: 20px;"></div>
     <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
-        <form id="publish-card-form">
+        <form id="publish-card-form" class="publish-card-form">
         <h3>Create or Update an Admin Card</h3>
         <div class="publish-card-checkbox" style="margin-top: 1em;">
           <input type="checkbox" id="topic-checkbox" name="topicMode" />
@@ -195,68 +195,67 @@ const loadAdminBoardPage = async () => {
   createScrollToTopButton()
   // await fetchAndValidateAllAdminCards()
   await updateOrSaveAdminGroupsDataLocally()
-  await fetchAllKicKBanTxData()
   await fetchAllEncryptedCards()  
 }
 
-const fetchAllKicKBanTxData = async () => {
-  const kickTxType = "GROUP_KICK"
-  const banTxType = "GROUP_BAN"
+// const fetchAllKicKBanTxData = async () => {
+//   const kickTxType = "GROUP_KICK"
+//   const banTxType = "GROUP_BAN"
 
-  // Helper function to filter transactions
-  const filterTransactions = (rawTransactions) => {
-    // Group transactions by member
-    const memberTxMap = rawTransactions.reduce((map, tx) => {
-      if (!map[tx.member]) {
-        map[tx.member] = []
-      }
-      map[tx.member].push(tx)
-      return map
-    }, {})
+//   // Helper function to filter transactions
+//   const filterTransactions = (rawTransactions) => {
+//     // Group transactions by member
+//     const memberTxMap = rawTransactions.reduce((map, tx) => {
+//       if (!map[tx.member]) {
+//         map[tx.member] = []
+//       }
+//       map[tx.member].push(tx)
+//       return map
+//     }, {})
 
-    // Filter out members with both pending and non-pending transactions
-    return Object.values(memberTxMap)
-      .filter(txs => txs.every(tx => tx.approvalStatus !== 'PENDING'))
-      .flat()
-      // .filter((txs) => !(txs.some(tx => tx.approvalStatus === 'PENDING') &&
-      //                    txs.some(tx => tx.approvalStatus !== 'PENDING')))
-      // .flat()
-  }
+//     // Filter out members with both pending and non-pending transactions
+//     return Object.values(memberTxMap)
+//       .filter(txs => txs.every(tx => tx.approvalStatus !== 'PENDING'))
+//       .flat()
+//       // .filter((txs) => !(txs.some(tx => tx.approvalStatus === 'PENDING') &&
+//       //                    txs.some(tx => tx.approvalStatus !== 'PENDING')))
+//       // .flat()
+//   }
 
-  // Fetch ban transactions
-  const rawBanTransactions = await searchTransactions({
-    txTypes: [banTxType],
-    address: '',
-    confirmationStatus: 'CONFIRMED',
-    limit: 0,
-    reverse: true,
-    offset: 0,
-    startBlock: 1990000,
-    blockLimit: 0,
-    txGroupId: 0,
-  })
+//   // Fetch ban transactions
+//   const rawBanTransactions = await searchTransactions({
+//     txTypes: [banTxType],
+//     address: '',
+//     confirmationStatus: 'CONFIRMED',
+//     limit: 0,
+//     reverse: true,
+//     offset: 0,
+//     startBlock: 1990000,
+//     blockLimit: 0,
+//     txGroupId: 0,
+//   })
 
-  // Filter transactions for bans
-  banTransactions = filterTransactions(rawBanTransactions)
-  console.warn('banTxData (filtered):', banTransactions)
+//   // Filter transactions for bans
+//   banTransactions = filterTransactions(rawBanTransactions)
+//   console.warn('banTxData (filtered):', banTransactions)
 
-  // Fetch kick transactions
-  const rawKickTransactions = await searchTransactions({
-    txTypes: [kickTxType],
-    address: '',
-    confirmationStatus: 'CONFIRMED',
-    limit: 0,
-    reverse: true,
-    offset: 0,
-    startBlock: 1990000,
-    blockLimit: 0,
-    txGroupId: 0,
-  })
+//   // Fetch kick transactions
+//   const rawKickTransactions = await searchTransactions({
+//     txTypes: [kickTxType],
+//     address: '',
+//     confirmationStatus: 'CONFIRMED',
+//     limit: 0,
+//     reverse: true,
+//     offset: 0,
+//     startBlock: 1990000,
+//     blockLimit: 0,
+//     txGroupId: 0,
+//   })
 
-  // Filter transactions for kicks
-  kickTransactions = filterTransactions(rawKickTransactions)
-  console.warn('kickTxData (filtered):', kickTransactions)
-}
+//   // Filter transactions for kicks
+//   kickTransactions = filterTransactions(rawKickTransactions)
+//   console.warn('kickTxData (filtered):', kickTransactions)
+// }
 
 
 // Example: fetch and save admin public keys and count
@@ -744,16 +743,30 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
 
   // If not topic mode, validate the user actually entered a valid Minter name
   if (!isTopic) {
+    let minterAddress
     publishedMinterName = await validateMinterName(minterNameInput)
     if (!publishedMinterName) {
-      alert(`"${minterNameInput}" doesn't seem to be a valid name. Please check or use topic mode.`)
-      return
-    }
+      try {
+        const addressInfo = await getAddressInfo(minterNameInput)
+        if (addressInfo) {
+          console.warn(`checked minterNameInput and found it to be an address... proceeding accordingly.`)
+          minterAddress = addressInfo.address
+          publishedMinterName = addressInfo.address
+        } else {
+          alert(`"${minterNameInput}" doesn't seem to be a valid name or address. Please check or use topic mode.`)
+          return
+        }
+      } catch (error) {
+        console.warn(`error checking for address...?`, error)
+        alert(`Failed to verify name/address. Please try again, or change to topicMode to publish anything else.`)
+        return
+      }
+    }    
     // Also check for existing card if not topic
     if (!isUpdateCard && existingCardMinterNames.some(item => item.minterName === publishedMinterName)) {
       const duplicateCardData = existingCardMinterNames.find(item => item.minterName === publishedMinterName)
       const updateCard = confirm(
-        `Minter Name: ${publishedMinterName} already has a card. Duplicate name-based cards are not allowed. You can OVERWRITE it or Cancel publishing. UPDATE CARD?`
+        `Minter Name: ${publishedMinterName} already has a card. (NOTE this update functionality is no longer functional, it may or may not come back. Even if you update the card you won't see it. It is suggested to CANCEL and use topic mode.`
       )
       if (updateCard) {
         existingEncryptedCardIdentifier = duplicateCardData.identifier
@@ -762,6 +775,9 @@ const publishEncryptedCard = async (isTopicModePassed = false) => {
         return
       }
     }
+  }
+  if (!publishedMinterName && minterAddress){
+    console.log(`No name was found, but an address was, publishing address in cardData, and using address as name for card.`)
   }
 
   // Determine final card identifier
@@ -1067,7 +1083,7 @@ const checkAndDisplayRemoveActions = async (adminYes, name, cardIdentifier, name
   } else if ((minterAdmins) && (minterAdmins.length > 1) && isBlockPassed){
     const totalAdmins = minterAdmins.length
     const fortyPercent = totalAdmins * 0.40
-    minAdminCount = Math.round(fortyPercent)
+    minAdminCount = Math.ceil(fortyPercent)
     console.warn(`this is another check to ensure minterAdmin group has more than 1 admin. IF so we will calculate the 40% needed for GROUP_APPROVAL, that number is: ${minAdminCount}`)
   }
   if (isBlockPassed && (userState.isMinterAdmin || userState.isAdmin)) {
@@ -1260,7 +1276,7 @@ const getNewestAdminCommentTimestamp = async (cardIdentifier) => {
 
 // Create the overall Minter Card HTML -----------------------------------------------
 const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, commentCount) => {
-  const { minterName, header, content, links, creator, timestamp, poll, topicMode } = cardData
+  const { minterName, minterAddress = '', header, content, links, creator, timestamp, poll, topicMode } = cardData
   const formattedDate = new Date(timestamp).toLocaleString()
   const minterAvatar = !topicMode ? await getMinterAvatar(minterName) : null
   const creatorAvatar = await getMinterAvatar(creator)
@@ -1277,6 +1293,8 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
   const hasTopicMode = Object.prototype.hasOwnProperty.call(cardData, 'topicMode')
 
   let showTopic = false
+
+  const { finalKickTxs, pendingKickTxs, finalBanTxs, pendingBanTxs } = await fetchAllKickBanTxData() 
 
   if (hasTopicMode) {
     const modeVal = cardData.topicMode
@@ -1319,22 +1337,55 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
       accountInfo = await getNameInfo(verifiedName)
     }
       
-      const accountAddress = verifiedAddress ?  addressVerification.address : accountInfo.owner
-      const addressInfo =  verifiedAddress ? addressVerification : await getAddressInfo(accountAddress)
+    const accountAddress = verifiedAddress ?  addressVerification.address : accountInfo.owner
+    const addressInfo =  verifiedAddress ? addressVerification : await getAddressInfo(accountAddress)
+    const minterGroupAddresses = minterGroupMembers.map(m => m.member)
+    const adminAddresses = minterAdmins.map(m => m.member)
+    const existingAdmin = adminAddresses.includes(accountAddress)
+    const existingMinter = minterGroupAddresses.includes(accountAddress)
     
     levelText = ` - Level ${addressInfo.level}</h3>`
     console.log(`name is validated, utilizing for removal features...${verifiedName}`)
     penaltyText = addressInfo.blocksMintedPenalty == 0 ? '' : '<p>(has Blocks Penalty)<p>'
     adjustmentText = addressInfo.blocksMintedAdjustment == 0 ? '' : '<p>(has Blocks Adjustment)<p>'
-    const removeActionsHtml = verifiedAddress ? await checkAndDisplayRemoveActions(adminYes, verifiedAddress, cardIdentifier) :  await checkAndDisplayRemoveActions(adminYes, verifiedName, cardIdentifier)
+    const removeActionsHtml = verifiedAddress ? await checkAndDisplayRemoveActions(adminYes, verifiedAddress, cardIdentifier, true) :  await checkAndDisplayRemoveActions(adminYes, verifiedName, cardIdentifier)
     showRemoveHtml = removeActionsHtml
+
     if (userVote === 0) {
       cardColorCode = "rgba(1, 65, 39, 0.41)"; // or any green you want
     } else if (userVote === 1) {
       cardColorCode = "rgba(55, 12, 12, 0.61)"; // or any red you want
     }
+
+    const confirmedKick = finalKickTxs.some(
+      (tx) => tx.groupId === 694 && tx.member === accountAddress
+    )
+    const pendingKick = pendingKickTxs.some(
+      (tx) => tx.groupId === 694 && tx.member === accountAddress
+    )
+    const confirmedBan = finalBanTxs.some(
+      (tx) => tx.groupId === 694 && tx.offender === accountAddress
+    )
+    const pendingBan = pendingBanTxs.some(
+      (tx) => tx.groupId === 694 && tx.offender === accountAddress
+    )
     
-    if (banTransactions.some((banTx) => banTx.groupId === 694 && banTx.offender === accountAddress)){
+    // If user is definitely admin (finalAdd) and not pending removal
+    if (confirmedKick && !pendingKick && !existingMinter) {
+      console.warn(`account was already kicked, displaying as such...`)
+      cardColorCode = 'rgb(29, 7, 4)'
+      altText  = `<h4 style="color:rgb(143, 117, 21); margin-bottom: 0.5em;">KICKED From MINTER Group</h4>`
+      showRemoveHtml = ''
+      if (!adminBoardState.kickedCards.has(cardIdentifier)){
+        adminBoardState.kickedCards.add(cardIdentifier)
+      }
+      if (!showKickedBanned) {
+        console.warn(`kick/ban checkbox is unchecked, card is kicked, not displaying...`)
+        return ''
+      }
+    }
+
+    if (confirmedBan && !pendingBan && !pendingKick && !existingMinter) {
       console.warn(`account was already banned, displaying as such...`)
       cardColorCode = 'rgb(24, 3, 3)'
       altText  = `<h4 style="color:rgb(106, 2, 2); margin-bottom: 0.5em;">BANNED From MINTER Group</h4>`
@@ -1348,19 +1399,33 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
       }
     }
     
-    if (kickTransactions.some((kickTx) => kickTx.groupId === 694 && kickTx.member === accountAddress)){
-      console.warn(`account was already kicked, displaying as such...`)
-      cardColorCode = 'rgb(29, 7, 4)'
-      altText  = `<h4 style="color:rgb(143, 117, 21); margin-bottom: 0.5em;">KICKED From MINTER Group</h4>`
-      showRemoveHtml = ''
-      if (!adminBoardState.kickedCards.has(cardIdentifier)){
-        adminBoardState.kickedCards.add(cardIdentifier)
-      }
-      if (!showKickedBanned) {
-        console.warn(`kick/ban checkbox is unchecked, card is kicked, not displaying...`)
-        return ''
-      }
-    }
+    // if (banTransactions.some((banTx) => banTx.groupId === 694 && banTx.offender === accountAddress)){
+    //   console.warn(`account was already banned, displaying as such...`)
+    //   cardColorCode = 'rgb(24, 3, 3)'
+    //   altText  = `<h4 style="color:rgb(106, 2, 2); margin-bottom: 0.5em;">BANNED From MINTER Group</h4>`
+    //   showRemoveHtml = ''
+    //   if (!adminBoardState.bannedCards.has(cardIdentifier)){
+    //     adminBoardState.bannedCards.add(cardIdentifier)
+    //   }
+    //   if (!showKickedBanned){
+    //     console.warn(`kick/bank checkbox is unchecked, and card is banned, not displaying...`)
+    //     return ''
+    //   }
+    // }
+    
+    // if (kickTransactions.some((kickTx) => kickTx.groupId === 694 && kickTx.member === accountAddress)){
+    //   console.warn(`account was already kicked, displaying as such...`)
+    //   cardColorCode = 'rgb(29, 7, 4)'
+    //   altText  = `<h4 style="color:rgb(143, 117, 21); margin-bottom: 0.5em;">KICKED From MINTER Group</h4>`
+    //   showRemoveHtml = ''
+    //   if (!adminBoardState.kickedCards.has(cardIdentifier)){
+    //     adminBoardState.kickedCards.add(cardIdentifier)
+    //   }
+    //   if (!showKickedBanned) {
+    //     console.warn(`kick/ban checkbox is unchecked, card is kicked, not displaying...`)
+    //     return ''
+    //   }
+    // }
     
   } else {
     console.log(`name could not be validated, assuming topic card (or some other issue with name validation) for removalActions`)

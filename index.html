@@ -28,8 +28,14 @@
         <link rel="preload" href="./assets/css/space-grotesk.css?family=Space+Grotesk:300,400,500,600,700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
         <noscript><link rel="stylesheet" href="./assets/css/space-grotesk.css?family=Space+Grotesk:300,400,500,600,700&display=swap"></noscript>
         <link href="./assets/quill/quill.snow.css" rel="stylesheet">
+
+        
     </head>
 <body>
+    <script>
+        // Variable-based versioning (credit: QuickMythril)
+        ;  // Update here in the future
+    </script>
   
   <section data-bs-version="5.1" class="menu menu1 boldm5 cid-ttRnktJ11Q" once="menu" id="menu1-0">
 
@@ -42,7 +48,7 @@
                     </a>
                 </span>
                 <span class="navbar-caption-wrap">
-                    <a class="navbar-caption display-4" href="index.html">Q-Mintership (v1.04b)
+                    <a class="navbar-caption display-4" href="index.html"><span class="navbar-caption display-4 version"></span>
                     </a>
                 </span>
             </div>
@@ -61,7 +67,7 @@
                         <img src="assets/images/again-edited-qortal-minting-icon-156x156.png" alt="">
                     </a>
                 </span>
-                    <span class="navbar-caption-wrap"><a class="navbar-caption text-primary display-4" href="index.html">Q-Mintership v1.04b<br></a></span>
+                    <span class="navbar-caption-wrap"><a class="navbar-caption text-primary display-4" href="index.html"><span class="navbar-caption display-4 version"></span><br></a></span>
                 </div>
                 <ul class="navbar-nav nav-dropdown" data-app-modern-menu="true"><li class="nav-item"><a class="nav-link link text-primary display-7" href="MINTERSHIP-FORUM"></a></li></ul>
                 
@@ -84,7 +90,7 @@
                         <img src="assets/images/mbr-1623x1082.jpg" alt="Admin Board" data-slide-to="1" data-bs-slide-to="1">
                         <div class="item-content">
                             <h2 class="card-title mbr-fonts-style display-2">
-                                Admin Board</h2>
+                                ADMIN BOARD</h2>
                         </div>
                     </div>
                 </a>
@@ -93,7 +99,7 @@
                     <div class="item-wrapper">
                         <img src="assets/images/mbr-1623x1112.jpg" alt="Mintership Forum" data-slide-to="0" data-bs-slide-to="0">
                         <div class="item-content">
-                            <h2 class="card-title mbr-fonts-style display-2">MinterBoard</h2>
+                            <h2 class="card-title mbr-fonts-style display-2">MINTER BOARD</h2>
                         </div>
                     </div>
                 </a>
@@ -109,7 +115,7 @@
                         <img src="assets/images/mbr-1818x1212.jpg" alt="Admin Board" data-slide-to="1" data-bs-slide-to="1">
                         <div class="item-content">
                             <h2 class="card-title mbr-fonts-style display-2">
-                               Minter Admin Management (MAM) Board</h2>
+                               MAM BOARD</h2>
                         </div>
                     </div>
                 </a>
@@ -118,7 +124,7 @@
                     <div class="item-wrapper">
                         <img src="assets/images/mbr-1-1818x1212.jpg" alt="Mintership Forum" data-slide-to="0" data-bs-slide-to="0">
                         <div class="item-content">
-                            <h2 class="card-title mbr-fonts-style display-2">Mintership Forum</h2>
+                            <h2 class="card-title mbr-fonts-style display-2">Q-MINTERSHIP FORUM</h2>
                         </div>
                     </div>
                 </a>
@@ -572,12 +578,12 @@
                 <div class="title-wrapper">
                     <div class="title-wrap">
                         <img src="assets/images/again-edited-qortal-minting-icon-156x156.png" alt="">
-                        <h2 class="mbr-section-title mbr-fonts-style display-5">Q-Mintership (v1.04b)</h2>
+                        <h2 class="mbr-section-title mbr-fonts-style display-5"><span class="navbar-caption display-4 version"></span></h2>
                     </div>
                 </div>
                 
                 <a class="link-wrap" href="#">
-                    <p class="mbr-link mbr-fonts-style display-4">Q-Mintership v1.04beta</p>
+                    <p class="mbr-link mbr-fonts-style display-4"><span class="navbar-caption display-4 version"></span></p>
                 </a>
             </div>
             <div class="col-12 col-lg-6">
@@ -590,7 +596,6 @@
     </div>
 </section>
 
-
 <script src="./assets/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="./assets/parallax/jarallax.js"></script>
 <!-- <script src="./assets/smoothscroll/smooth-scroll.js"></script> -->
@@ -598,12 +603,13 @@
 <script src="./assets/dropdown/js/navbar-dropdown.js"></script>
 <script src="./assets/theme/js/script.js"></script>
 <script src="./assets/quill/quill.min.js"></script>
-
+<!-- Order here MATTERS, we MUST load the scripts in the correct order so that all the functions will work properly -->
 <script src="./assets/js/QortalApi.js"></script>
+<script src="./assets/js/Shared.js"></script>
 <script src="./assets/js/MinterBoard.js"></script>
-<script src="./assets/js/AdminTools.js"></script>
 <script src="./assets/js/AdminBoard.js"></script>
 <script src="./assets/js/ARBoard.js"></script>
+<script src="./assets/js/AdminTools.js"></script>
 <script src="./assets/js/Q-Mintership.js"></script>
   <input name="animation" type="hidden">
   </body>

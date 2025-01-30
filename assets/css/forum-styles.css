@@ -461,6 +461,27 @@
 /* General Page Styles */
 /* Main Container for Minter Board */
 
+input[type="checkbox"] {
+  width: 25px; /* Adjust width */
+  height: 25px; /* Adjust height */
+  appearance: none; /* Remove default styling */
+  background-color: rgb(15, 21, 22);
+  border: 2px solid rgb(98, 99, 106);
+  border-radius: 4px; /* Optional rounded corners */
+  display: inline-block;
+  position: relative;
+}
+
+input[type="checkbox"]:checked::after {
+  content: "✔"; /* Custom checkmark */
+  font-size: 20px;
+  color: rgb(201, 201, 201);
+  position: absolute;
+  top: 0;
+  left: 4px;
+}
+
+
 body {
   background-color: black;
 }
@@ -555,6 +576,65 @@ body {
   margin-bottom: 2vh;
 }
 
+.blocklist-form {
+  display: flex;
+  flex-direction: column;
+  background-color: #1b1b1b;   /* or your dark color */
+  border: 1px solid #444; 
+  border-radius: 5px;
+  padding: 20px;
+  margin: 20px auto;           /* center horizontally */
+  max-width: 600px;           /* limit width */
+  color: #ddd;                /* text color */
+  text-align: center;
+  align-items: center;
+}
+
+.blocklist-display {
+  /* This holds the list of blocked names */
+  border: 1px dashed;
+  background-color:#000000;
+  width: 90%;
+  font-size: 1.8rem;
+  color: #4d0000;
+  text-align: center;
+  align-items: center;
+  /* you could style the list items or bullet if you like */
+}
+
+.blocklist-button-container {
+  /* This area will hold the text input + the row for buttons */
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+}
+
+.blocklist-form input.blocklist-input {
+  padding: 1rem;
+  font-size: 2rem;
+  line-height: 2;
+  background-color: #14161a;
+  border: 1px solid #8caeb0;
+  border-radius: 4px;
+  color: #5c0101;
+}
+
+.publish-card-button {
+  background-color: #529d8d84;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 1.5rem;
+  transition: background-color 0.2s ease;
+}
+
+.publish-card-button:hover {
+  background-color: #3b5c71; /* a darker variant */
+}
+
+
 .publish-card-view textarea {
   min-height: 15vh;
   resize: vertical;
@@ -570,9 +650,9 @@ body {
   margin-bottom: 1.5vh;
 }
 
-/* Buttons Inside Form */
-#publish-card-form button {
-  background-color: #76c7c0;
+/* Generic: all buttons inside .publish-card-form */
+.publish-card-form button {
+  background-color: #359f4a;
   color: #1e1e1e;
   border: none;
   border-radius: 0.5vh;
@@ -583,28 +663,74 @@ body {
   transition: background-color 0.3s;
 }
 
-#publish-card-form button:hover {
+.publish-card-form button:hover {
   background-color: #5e92a8;
 }
 
-#publish-card-form #add-link-button {
+/* Then specifically override the add button */
+.publish-card-form #blocklist-add-button {
+  background-color: #233748;
+  color: #ffffff;
+}
+
+.publish-card-form #blocklist-add-button:hover {
+  background-color: #1b1936;
+}
+
+.publish-card-form #add-link-button {
   background-color: #233748;
   color: #ffffff;
   margin-bottom: 2vh;
 }
 
-#publish-card-form #add-link-button:hover {
+.publish-card-form #add-link-button:hover {
   background-color: #1b1936;
 }
 
-/* Cancel Button */
-#publish-card-form #cancel-publish-button {
+/* And specifically override the remove button */
+.publish-card-form #blocklist-remove-button {
   background-color: #463737;
   color: #ffffff;
 }
 
-#publish-card-form #cancel-publish-button:hover {
+.publish-card-form #blocklist-remove-button:hover {
   background-color: #281e1e;
+}
+
+
+.publish-card-form #cancel-publish-button {
+  background-color: #463737;
+  color: #fff;
+}
+
+.publish-card-form #cancel-publish-button:hover {
+  background-color: #281e1e;
+}
+
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .publish-card-view {
+    width: 90%;
+    padding: 2vh;
+  }
+
+  .publish-card-button {
+    font-size: 1.8vh;
+    padding: 1.5vh;
+  }
+
+  .publish-card-form button {
+    font-size: 1.8vh;
+    padding: 1.2vh;
+  }
+}
+
+.refresh-cards-button {
+  border-color: white;
+  border-radius: 1.5vh;
+  background-color: black;
+  color: white;
 }
 
 /* Responsive Design */
@@ -619,7 +745,7 @@ body {
     padding: 1.5vh;
   }
 
-  #publish-card-form button {
+  .publish-card-form button {
     font-size: 1.8vh;
     padding: 1.2vh;
   }

@@ -1,3 +1,5 @@
+const Q_MINTERSHIP_VERSION = "1.05"
+
 const messageIdentifierPrefix = `mintership-forum-message`
 const messageAttachmentIdentifierPrefix = `mintership-forum-attachment`
 
@@ -66,6 +68,10 @@ if (localStorage.getItem("latestMessageIdentifiers")) {
 
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("DOMContentLoaded fired!")
+  createScrollToTopButton()
+  document.querySelectorAll(".version").forEach(el => {
+    el.textContent = `Q-Mintership (v${Q_MINTERSHIP_VERSION}b)`
+})
 
   // --- GENERAL LINKS (MINTERSHIP-FORUM and MINTER-BOARD) ---
   const mintershipForumLinks = document.querySelectorAll('a[href="MINTERSHIP-FORUM"]')
@@ -94,7 +100,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         await loadScript("./assets/js/MinterBoard.js")
       }
       await loadMinterBoardPage()
-      createScrollToTopButton()
     })
   })
 

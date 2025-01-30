@@ -37,7 +37,7 @@ const loadAddRemoveAdminPage = async () => {
                 Propose a Minter for Admin Position
             </button>
             <div id="promotion-form-container" class="publish-card-view" style="display: none; margin-top: 1em;">
-                <form id="publish-card-form">
+                <form id="publish-card-form" class="publish-card-form">
                     <h3>Create or Update Promotion/Demotion Proposal Card</h3>
                     <label for="minter-name-input">Input NAME (promotion):</label>
                     <input type="text" id="minter-name-input" maxlength="100" placeholder="input NAME of MINTER for PROMOTION" required>
@@ -59,7 +59,7 @@ const loadAddRemoveAdminPage = async () => {
         <div id="existing-proposals-section" class="proposals-section" style="margin-top: 3em; display: flex; flex-direction: column; justify-content: center; align-items: center;">
             <h3 style="color: #ddd;">Existing Promotion/Demotion Proposals</h3>
             <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Proposal Cards</button>
-            <select id="time-range-select" style="margin-left: 10px; padding: 5px;">
+            <select id="time-range-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color: white; background-color: black;">
                 <option value="0">Show All</option>
                 <option value="1">Last 1 day</option>
                 <option value="7">Last 7 days</option>
@@ -176,7 +176,7 @@ const fetchAllARTxData = async () => {
     }
 }
   
-function partitionAddTransactions(rawTransactions) {
+const partitionAddTransactions = (rawTransactions) => {
     const finalAddTxs = []
     const pendingAddTxs = []
   
@@ -191,7 +191,7 @@ function partitionAddTransactions(rawTransactions) {
     return { finalAddTxs, pendingAddTxs };
 }
   
-function partitionRemoveTransactions(rawTransactions) {
+const partitionRemoveTransactions = (rawTransactions) => {
     const finalRemTxs = []
     const pendingRemTxs = []
 
@@ -434,15 +434,17 @@ const publishARCard = async (cardIdentifierPrefix) => {
 
     if (exists) {
         alert(`An existing card was found, you must update it, two cards for the samme name cannot be published! Loading card data...`)
-        await loadCardIntoForm(existingCardData)
-        minterName = exists.minterName
-        const nameInfo = await getNameInfo(exists.minterName)
-        address = nameInfo.owner
-        isExistingCard = true
-    } else if (otherPublisher){
-        alert(`An existing card was found, but you are NOT the publisher, you may not publish duplicates, and you may not update a non-owned card! Please try again with another name, or use the existing card for ${minterNameInput}`)
-        return
-    }
+        if (exists.creator != userState.accountName) {
+            alert(`You are not the original publisher of this card, exiting.`)
+            return
+        }else {
+            await loadCardIntoForm(existingCardData)
+            minterName = exists.minterName
+            const nameInfo = await getNameInfo(exists.minterName)
+            address = nameInfo.owner
+            isExistingCard = true
+        }
+    } 
 
     const minterGroupData = await fetchMinterGroupMembers()
     minterGroupAddresses = minterGroupData.map(m => m.member)
@@ -481,6 +483,7 @@ const publishARCard = async (cardIdentifierPrefix) => {
   
     const cardData = {
       minterName,  
+      minterAddress: address,
       header,
       content,
       links,
@@ -550,7 +553,7 @@ const checkAndDisplayActions = async (adminYes, name, cardIdentifier) => {
     } else if ((minterAdmins) && (minterAdmins.length > 1) && isBlockPassed){
       const totalAdmins = minterAdmins.length
       const fortyPercent = totalAdmins * 0.40
-      minAdminCount = Math.round(fortyPercent)
+      minAdminCount = Math.ceil(fortyPercent)
       console.warn(`this is another check to ensure minterAdmin group has more than 1 admin. IF so we will calculate the 40% needed for GROUP_APPROVAL, that number is: ${minAdminCount}`)
     }
     const addressInfo = await getNameInfo(name)
@@ -735,7 +738,7 @@ const fallbackMinterCheck = async (minterName, minterGroupMembers, minterAdmins)
   
 
 const createARCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, bgColor, cardPublisherAddress, illegalDuplicate) => {
-    const { minterName, minterAddress='priorToAddition', header, content, links, creator, timestamp, poll, promotionCard } = cardData
+    const { minterName, minterAddress='', header, content, links, creator, timestamp, poll, promotionCard } = cardData
     const formattedDate = new Date(timestamp).toLocaleString()
     const minterAvatar = await getMinterAvatar(minterName)
     const creatorAvatar = await getMinterAvatar(creator)
@@ -744,6 +747,14 @@ const createARCardHTML = async (cardData, pollResults, cardIdentifier, commentCo
         ${`Link ${index + 1} - ${link}`}
       </button>
     `).join("")
+    // Adding fix for accidental code in 1.04b
+    let publishedMinterAddress
+    if (!minterAddress || minterAddress ==='priorToAddition'){
+        publishedMinterAddress = ''
+    } else if (minterAddress){
+        console.log(`minter address found in card info: ${minterAddress}`)
+        publishedMinterAddress = minterAddress
+    }
 
     const minterGroupMembers = await fetchMinterGroupMembers()
     const minterAdmins = await fetchMinterGroupAdmins()

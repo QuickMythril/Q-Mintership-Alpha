@@ -53,7 +53,7 @@ const timestampToHumanReadableDate = async(timestamp) => {
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const seconds = String(date.getSeconds()).padStart(2, '0');
 
-    const formattedDate = `${year}.${month}.${day}@${hours}:${minutes}:${seconds}`
+    const formattedDate = `${day}.${month}.${year}..@${hours}:${minutes}:${seconds}`
     console.log('Formatted date:', formattedDate)
     return formattedDate
 }
@@ -146,7 +146,7 @@ const base64ToUint8Array = async (base64) => {
     }
 
     return bytes
-  }
+}
 
 const uint8ArrayToObject = async (uint8Array) => {
     // Decode the byte array using TextDecoder
@@ -157,7 +157,7 @@ const uint8ArrayToObject = async (uint8Array) => {
     const obj = JSON.parse(jsonString)
 
     return obj
-  }
+}
 
 
 const objectToBase64 = async (obj) => {
@@ -331,7 +331,7 @@ const getNameInfo = async (name) => {
     console.log('getNameInfo called')
     console.log('name:', name)
     try {
-        const response = await fetch(`${baseUrl}/names/${name}`)
+        const response = await fetch(`${baseUrl}/names/${encodeURIComponent(name)}`)
 
         if (!response.ok) {
             console.warn(`Failed to fetch name info for: ${name}, status: ${response.status}`)
@@ -438,17 +438,17 @@ const login = async () => {
 }
 
 const getNameFromAddress = async (address) => {
-try {
-    const response = await fetch(`${baseUrl}/names/address/${address}?limit=20`, {
-    method: 'GET',
-    headers: { 'Accept': 'application/json' }
-    })
-    const names = await response.json()
-    return names.length > 0 ? names[0].name : address // Return name if found, else return address
-} catch (error) {
-    console.error(`Error fetching names for address ${address}:`, error)
-    return address
-}
+    try {
+        const response = await fetch(`${baseUrl}/names/address/${address}?limit=20`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+        })
+        const names = await response.json()
+        return names.length > 0 ? names[0].name : address // Return name if found, else return address
+    } catch (error) {
+        console.error(`Error fetching names for address ${address}:`, error)
+        return address
+    }
 }
 
 
@@ -491,28 +491,6 @@ const fetchMinterGroupAdmins = async () => {
     //use what is returned .member to obtain each member... {"member": "memberAddress", "isAdmin": "true"}
 }
 
-// const fetchAllAdminGroupsMembers = async () => {
-//     try  {
-//         let adminGroupMemberAddresses = [] // Declare outside loop to accumulate results
-//         for (const groupID of adminGroupIDs) {
-//             const response = await fetch(`${baseUrl}/groups/members/${groupID}?limit=0`, {
-//                 method: 'GET',
-//                 headers: { 'Accept': 'application/json' },
-//             })
-
-//             const groupData = await response.json() 
-//             if (groupData.members && Array.isArray(groupData.members)) {
-//                 adminGroupMemberAddresses.push(...groupData.members) // Merge members into the array
-//             } else {
-//                 console.warn(`Group ${groupID} did not return valid members.`)
-//             }
-//         }
-//         return adminGroupMemberAddresses
-//     } catch (error) {
-//         console.log('Error fetching admin group members', error)
-//     }
-// }
-
 const fetchAllAdminGroupsMembers = async () => {
     try {
       // We'll track addresses so we don't duplicate the same .member
@@ -545,7 +523,7 @@ const fetchAllAdminGroupsMembers = async () => {
       console.error('Error fetching admin group members', error)
       return []
     }
-  }
+}
 
 const fetchMinterGroupMembers = async () => {
     try {
@@ -651,7 +629,7 @@ const fetchGroupInvitesByAddress = async (address) => {
       console.error('Error fetching address group invites:', error)
       throw error
     }
-  }
+}
 
 // QDN data calls --------------------------------------------------------------------------------------------------
 const searchLatestDataByIdentifier = async (identifier) => {
@@ -1141,7 +1119,7 @@ const base64ToBlob = (base64String, mimeType) => {
     }
     // Create a blob from the Uint8Array
     return new Blob([bytes], { type: mimeType })
-  }
+}
 
 const base64ToBlobUrl = (base64, mimeType) => {
     const binary = atob(base64)
@@ -1193,7 +1171,7 @@ const base64ToBlobUrl = (base64, mimeType) => {
       console.error("Skipping file due to error in fetchEncryptedImageBase64:", error)
       return null // indicates "missing or failed"
     }
-  }
+}
   
   
 
@@ -1363,7 +1341,7 @@ const processTransaction = async (signedTransaction) => {
       console.error("Error processing transaction:", error)
       throw error
     }
-  }
+}
   
 
 // Create a group invite transaction. This will utilize a default timeToLive (which is how long the tx will be alive, not the time until it IS live...) of 10 days in seconds, as the legacy UI has a bug that doesn't display invites older than 10 days.
@@ -1860,7 +1838,7 @@ const searchTransactions = async ({
       console.error("Error in searchTransactions:", error)
       throw error
     }
-  }
+}
 
 const searchPendingTransactions = async (limit = 20, offset = 0) => {
     try {
@@ -1891,5 +1869,5 @@ const searchPendingTransactions = async (limit = 20, offset = 0) => {
       console.error("Error in searchPendingTransactions:", error)
       throw error
     }
-  }
+}
   

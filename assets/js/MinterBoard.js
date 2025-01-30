@@ -30,14 +30,14 @@ const loadMinterBoardPage = async () => {
       <p style="font-size: 1.25em;"> Publish a Minter Card with Information, and obtain and view the support of the community. Welcome to the Minter Board!</p>
       <button id="publish-card-button" class="publish-card-button" style="margin: 20px; padding: 10px; background-color: ${publishButtonColor}">Publish Minter Card</button>
       <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Cards</button>
-      <select id="sort-select" style="margin-left: 10px; padding: 5px;">
+      <select id="sort-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color:rgb(38, 106, 106); background-color: black;">
         <option value="newest" selected>Sort by Date</option>
         <option value="name">Sort by Name</option>
         <option value="recent-comments">Newest Comments</option>
         <option value="least-votes">Least Votes</option>
         <option value="most-votes">Most Votes</option>
       </select>
-      <select id="time-range-select" style="margin-left: 10px; padding: 5px;">
+      <select id="time-range-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color: white; background-color: black;">
         <option value="0">Show All</option>
         <option value="1">Last 1 day</option>
         <option value="7">Last 7 days</option>
@@ -46,7 +46,7 @@ const loadMinterBoardPage = async () => {
       </select>
       <div id="cards-container" class="cards-container" style="margin-top: 20px;"></div>
       <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
-        <form id="publish-card-form">
+        <form id="publish-card-form" class="publish-card-form">
           <h3>Create or Update Your Card</h3>
           <label for="card-header">Header:</label>
           <input type="text" id="card-header" maxlength="100" placeholder="Enter card header" required>
@@ -148,6 +148,7 @@ const loadMinterBoardPage = async () => {
   await loadCards(minterCardIdentifierPrefix)
 }
 
+
 const extractMinterCardsMinterName = async (cardIdentifier) => {
   // Ensure the identifier starts with the prefix
   if ((!cardIdentifier.startsWith(minterCardIdentifierPrefix)) && (!cardIdentifier.startsWith(addRemoveIdentifierPrefix))) {
@@ -197,7 +198,6 @@ const groupAndLabelByIdentifier = (allCards) => {
     }
     mapById.get(card.identifier).push(card)
   })
-
   // For each identifier's group, sort oldest->newest so the first is "master"
   const output = []
   for (const [identifier, group] of mapById.entries()) {
@@ -206,14 +206,12 @@ const groupAndLabelByIdentifier = (allCards) => {
       const bTime = b.created || 0
       return aTime - bTime  // oldest first
     })
-
     // Mark the first as master
     group[0].isMaster = true
     // The rest are updates
     for (let i = 1; i < group.length; i++) {
       group[i].isMaster = false
     }
-
     // push them all to output
     output.push(...group)
   }
@@ -221,7 +219,6 @@ const groupAndLabelByIdentifier = (allCards) => {
   return output
 }
 
-// no semicolons, using arrow functions
 const groupByIdentifierOldestFirst = (allCards) => {
   // map of identifier => array of cards
   const mapById = new Map()
@@ -232,7 +229,6 @@ const groupByIdentifierOldestFirst = (allCards) => {
     }
     mapById.get(card.identifier).push(card)
   })
-
   // sort each group oldest->newest
   for (const [identifier, group] of mapById.entries()) {
     group.sort((a, b) => {
@@ -245,22 +241,18 @@ const groupByIdentifierOldestFirst = (allCards) => {
   return mapById
 }
 
-// no semicolons, arrow functions
 const buildMinterNameGroups = async (mapById) => {
   // We'll build an array of objects: { minterName, cards }
   // Then we can combine any that share the same minterName.
-
   const nameGroups = []
 
   for (let [identifier, group] of mapById.entries()) {
     // group[0] is the oldest => "master" card
     let masterCard = group[0]
-
     // Filter out any cards that are not published by the 'masterPublisher'
     const masterPublisherName = masterCard.name
     // Remove any cards in this identifier group that have a different publisherName
     const filteredGroup = group.filter(c => c.name === masterPublisherName)
-
     // If filtering left zero cards, skip entire group
     if (!filteredGroup.length) {
       console.warn(`All cards removed for identifier=${identifier} (different publishers). Skipping.`)
@@ -269,7 +261,6 @@ const buildMinterNameGroups = async (mapById) => {
     // Reassign group to the filtered version, then re-define masterCard
     group = filteredGroup
     masterCard = group[0] // oldest after filtering
-
     // attempt to obtain minterName from the master card
     let masterMinterName
     try {
@@ -278,14 +269,12 @@ const buildMinterNameGroups = async (mapById) => {
       console.warn(`Skipping entire group ${identifier}, no valid minterName from master`, err)
       continue
     }
-
     // Store an object with the minterName we extracted, plus all cards in that group
     nameGroups.push({
       minterName: masterMinterName,
       cards: group // includes the master & updates
     })
   }
-
   // Combine them: minterName => array of *all* cards from all matching groups
   const combinedMap = new Map()
   for (const entry of nameGroups) {
@@ -373,7 +362,6 @@ const processARBoardCards = async (allValidCards) => {
   return finalOutput
 }
 
-
 //Main function to load the Minter Cards ----------------------------------------
 const loadCards = async (cardIdentifierPrefix) => {
   const cardsContainer = document.getElementById("cards-container")
@@ -452,9 +440,11 @@ const loadCards = async (cardIdentifierPrefix) => {
     // else 'newest' => do nothing (already sorted newest-first by your process functions).
     // Create the 'finalCardsArray' that includes the data, etc.
     let finalCardsArray = []
-
+    cardsContainer.innerHTML = ''
     for (const card of finalCards) {
       try {
+        const skeletonHTML = createSkeletonCardHTML(card.identifier)
+        cardsContainer.insertAdjacentHTML("beforeend", skeletonHTML)
         const cardDataResponse = await qortalRequest({
           action: "FETCH_QDN_RESOURCE",
           name: card.name,
@@ -465,6 +455,7 @@ const loadCards = async (cardIdentifierPrefix) => {
         if (!cardDataResponse || !cardDataResponse.poll) {
           // skip
           console.warn(`Skipping card: missing data/poll. identifier=${card.identifier}`)
+          removeSkeleton(card.identifier)
           continue
         }
         // Extra validation: check poll ownership matches card publisher
@@ -472,13 +463,22 @@ const loadCards = async (cardIdentifierPrefix) => {
         const cardPublisherAddress = await fetchOwnerAddressFromName(card.name)
         if (pollPublisherAddress !== cardPublisherAddress) {
           console.warn(`Poll hijack attack found, discarding card ${card.identifier}`)
+          removeSkeleton(card.identifier)
           continue
         }
         // If ARBoard, do a quick address check
         if (isARBoard) {
-          const ok = await verifyARBoardAddress(cardDataResponse.minterName)
+          const ok = await verifyMinter(cardDataResponse.minterName)
           if (!ok) {
-            console.warn(`Invalid minter address for AR board. identifier=${card.identifier}`)
+            console.warn(`Card is not a minter nor an admin, not including in ARBoard. identifier: ${card.identifier}`)
+            removeSkeleton(card.identifier)
+            continue
+          }
+        } else {
+          const isAlreadyMinter = await verifyMinter(cardDataResponse.minterName)
+          if (isAlreadyMinter) {
+            console.warn(`card IS ALREADY a minter, NOT displaying following identifier on the MinterBoard: ${card.identifier}`)
+            removeSkeleton(card.identifier)
             continue
           }
         }
@@ -491,18 +491,16 @@ const loadCards = async (cardIdentifierPrefix) => {
         })
       } catch (err) {
         console.error(`Error preparing card ${card.identifier}`, err)
+        removeSkeleton(card.identifier)
       }
     }
 
-    // This will now allow duplicates to be displayed, but also mark the duplicates correctly. There is one bugged identifier that must be handled opposite.
-    // finalCardsArray = markDuplicates(finalCardsArray)
-
     // Next, do the actual rendering:
-    cardsContainer.innerHTML = ""
+    // cardsContainer.innerHTML = ""
     for (const cardObj of finalCardsArray) {
       // Insert a skeleton first if you like
-      const skeletonHTML = createSkeletonCardHTML(cardObj.identifier)
-      cardsContainer.insertAdjacentHTML("beforeend", skeletonHTML)
+      // const skeletonHTML = createSkeletonCardHTML(cardObj.identifier)
+      // cardsContainer.insertAdjacentHTML("beforeend", skeletonHTML)
       // Build final HTML
       const pollResults = await fetchPollResults(cardObj.cardDataResponse.poll)
       const commentCount = await countComments(cardObj.identifier)
@@ -539,7 +537,7 @@ const loadCards = async (cardIdentifierPrefix) => {
   }
 }
 
-const verifyARBoardAddress = async (minterName) => {
+const verifyMinter = async (minterName) => {
   try {
     const nameInfo = await getNameInfo(minterName)
 
@@ -557,7 +555,7 @@ const verifyARBoardAddress = async (minterName) => {
     return (minterGroupAddresses.includes(minterAddress) ||
             adminGroupAddresses.includes(minterAddress))
   } catch (err) {
-    console.warn("verifyARBoardAddress error:", err)
+    console.warn("verifyMinter error:", err)
     return false
   }
 }
@@ -781,6 +779,7 @@ const publishCard = async (cardIdentifierPrefix) => {
     content,
     links,
     creator: userState.accountName,
+    creatorAddress: userState.accountAddress,
     timestamp: Date.now(),
     poll: pollName,
   }
@@ -812,7 +811,7 @@ const publishCard = async (cardIdentifierPrefix) => {
     }
 
     if (isExistingCard){
-      alert("Card Updated Successfully! (No poll updates are possible at this time...)")
+      alert("Card Updated Successfully! (No poll updates possible)")
       isExistingCard = false
     }
 
@@ -1058,7 +1057,7 @@ const buildVotersTableHtml = (voters, tableColor) => {
 }
 
 
-// Post a comment on a card. ---------------------------------
+// Post a comment on a card. --------------------------------- 
 const postComment = async (cardIdentifier) => {
   const commentInput = document.getElementById(`new-comment-${cardIdentifier}`)
   const commentText = commentInput.value.trim()
@@ -1067,33 +1066,43 @@ const postComment = async (cardIdentifier) => {
     alert('Comment cannot be empty!')
     return
   }
-  const commentData = {
-    content: commentText,
-    creator: userState.accountName,
-    timestamp: Date.now(),
-  }
-  const commentIdentifier = `comment-${cardIdentifier}-${await uid()}`
 
   try {
-    const base64CommentData = await objectToBase64(commentData)
+    //Ensure the user is not on the blockList prior to allowing them to publish a comment. 
+    const blockedNames = await fetchBlockList()
+    
+    if (blockedNames.includes(userState.accountName)) {
+      alert('You are on the block list and cannot publish comments.')
+      return
+    }
+    const commentData = {
+      content: commentText,
+      creator: userState.accountName,
+      timestamp: Date.now(),
+    }
+    const uniqueCommentIdentifier = `comment-${cardIdentifier}-${await uid()}`
+    let base64CommentData = await objectToBase64(commentData)
     if (!base64CommentData) {
-      console.log(`initial base64 object creation with objectToBase64 failed, using btoa...`)
+      console.log('objectToBase64 failed, fallback to btoa()')
       base64CommentData = btoa(JSON.stringify(commentData))
     }
+
     await qortalRequest({
       action: 'PUBLISH_QDN_RESOURCE',
       name: userState.accountName,
       service: 'BLOG_POST',
-      identifier: commentIdentifier,
+      identifier: uniqueCommentIdentifier,
       data64: base64CommentData,
     })
 
     commentInput.value = ''
+
   } catch (error) {
     console.error('Error posting comment:', error)
-    alert('Failed to post comment.')
+    alert('Failed to post comment. Error: ' + error)
   }
 }
+
 
 //Fetch the comments for a card with passed card identifier ----------------------------
 const fetchCommentsForCard = async (cardIdentifier) => {
@@ -1110,9 +1119,9 @@ const displayComments = async (cardIdentifier) => {
   try {
     const comments = await fetchCommentsForCard(cardIdentifier)
     const commentsContainer = document.getElementById(`comments-container-${cardIdentifier}`)
-
-    commentsContainer.innerHTML = ''
-
+    commentsContainer.innerHTML = ""
+    const blockedNames = await fetchBlockList()
+    console.log("Loaded block list:", blockedNames)
     const voterMap = globalVoterMap.get(cardIdentifier) || new Map()
 
     const commentHTMLArray = await Promise.all(
@@ -1122,33 +1131,38 @@ const displayComments = async (cardIdentifier) => {
             action: "FETCH_QDN_RESOURCE",
             name: comment.name,
             service: "BLOG_POST",
-            identifier: comment.identifier,
+            identifier: comment.identifier
           })
 
-          const timestamp = await timestampToHumanReadableDate(commentDataResponse.timestamp);
-
-          const commenter = commentDataResponse.creator
-          const voterInfo = voterMap.get(commenter)
-
+          if (!commentDataResponse || !commentDataResponse.creator) {
+            return null
+          }
+          const commenterName = commentDataResponse.creator
+          const voterInfo = voterMap.get(commenterName)
           let commentColor = "transparent"
           let adminBadge = ""
+
+          if (blockedNames.includes(commenterName)) {
+            console.warn(`Skipping blocked commenter: ${commenterName}`)
+            return null
+          }
 
           if (voterInfo) {
             if (voterInfo.voterType === "Admin") {
             
               commentColor = voterInfo.vote === "yes" ? "rgba(21, 150, 21, 0.6)" : "rgba(212, 37, 64, 0.6)" // Light green for yes, light red for no
-              const badgeColor = voterInfo.vote === "yes" ? "green" : "red"
+              const badgeColor = voterInfo.vote === "yes" ? "rgb(206, 195, 77)" : "rgb(121, 119, 90)"
               adminBadge = `<span style="color: ${badgeColor}; font-weight: bold; margin-left: 0.5em;">(Admin)</span>`
             } else {
 
               commentColor = voterInfo.vote === "yes" ? "rgba(0, 100, 0, 0.3)" : "rgba(100, 0, 0, 0.3)" // Darker green for yes, darker red for no
             }
           }
-
+          const timestamp = new Date(commentDataResponse.timestamp).toLocaleString()
           return `
             <div class="comment" style="border: 1px solid gray; margin: 1vh 0; padding: 1vh; background: ${commentColor};">
               <p>
-                <strong><u>${commentDataResponse.creator}</u></strong>
+                <strong>${commenterName}</strong>
                 ${adminBadge}
               </p>
               <p>${commentDataResponse.content}</p>
@@ -1156,21 +1170,22 @@ const displayComments = async (cardIdentifier) => {
             </div>
           `
         } catch (err) {
-          console.error(`Error processing comment ${comment.identifier}:`, err)
+          console.error(`Error with comment ${comment.identifier}:`, err)
           return null
         }
       })
     )
-
     commentHTMLArray
-      .filter((html) => html !== null) // Filter out failed comments
-      .forEach((commentHTML) => {
+      .filter(html => html !== null)
+      .forEach(commentHTML => {
         commentsContainer.insertAdjacentHTML('beforeend', commentHTML)
       })
-  } catch (error) {
-    console.error(`Error displaying comments (or no comments) for ${cardIdentifier}:`, error)
+
+  } catch (err) {
+    console.error(`Error displaying comments for ${cardIdentifier}:`, err)
   }
 }
+
 
 // Toggle comments from being shown or not, with passed cardIdentifier for comments being toggled --------------------
 const toggleComments = async (cardIdentifier) => {
@@ -1206,12 +1221,10 @@ const countComments = async (cardIdentifier) => {
 }
 
 
-
 const createModal = (modalType='') => {
   if (document.getElementById(`${modalType}-modal`)) {
     return
   }
-
   const isIframe = (modalType === 'links')
 
   const modalHTML = `
@@ -1259,15 +1272,14 @@ const createModal = (modalType='') => {
     </div>
   `
   document.body.insertAdjacentHTML('beforeend', modalHTML)
-
   const modal = document.getElementById(`${modalType}-modal`)
+
   window.addEventListener('click', (event) => {
     if (event.target === modal) {
       closeModal(modalType)
     }
   })
 }
-
 
 const openLinksModal = async (link) => {
   const processedLink = await processLink(link)
@@ -1311,9 +1323,9 @@ const togglePollDetails = (cardIdentifier) => {
   
   if (!detailsDiv || !modal || !modalContent) return
 
-  // modalContent.appendChild(detailsDiv)
   modalContent.innerHTML = detailsDiv.innerHTML
   modal.style.display = 'block'
+
   window.onclick = (event) => {
     if (event.target === modal) {
       modal.style.display = 'none'
@@ -1394,10 +1406,17 @@ const handleInviteMinter = async (minterName) => {
   }
 }
 
+const escapeHTML = (str) => {
+  return str
+    .replace(/'/g, '&#39;')
+    .replace(/"/g, '&quot;')
+}
+
 const createInviteButtonHtml = (creator, cardIdentifier) => {
+  const escapedCreator = escapeHTML(creator)
   return `
       <div id="invite-button-container-${cardIdentifier}" style="margin-top: 1em;">
-          <button onclick="handleInviteMinter('${creator}')"
+          <button onclick="handleInviteMinter('${escapedCreator}')"
                   style="padding: 10px; background:rgb(0, 109, 76) ; color: white; border: dotted; border-color: white; cursor: pointer; border-radius: 5px;"
                   onmouseover="this.style.backgroundColor='rgb(25, 47, 39) '"
                   onmouseout="this.style.backgroundColor='rgba(7, 122, 101, 0.63) '"
@@ -1423,73 +1442,59 @@ const featureTriggerCheck = async () => {
 }
 
 const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) => {
-
-  if (!userState.isMinterAdmin){
-    console.warn(`User is NOT an admin, not displaying invite/approve button...`)
-    return null
-  }
-
+  const isSomeTypaAdmin = userState.isAdmin || userState.isMinterAdmin
   const isBlockPassed = await featureTriggerCheck()
-  const minterAdmins = await fetchMinterGroupAdmins() 
+  const minterAdmins = await fetchMinterGroupAdmins()
 
+  // default needed admin count = 9, or 40% if block has passed
   let minAdminCount = 9
   if (isBlockPassed) {
-    minAdminCount = Math.round(minterAdmins.length * 0.4)
+    minAdminCount = Math.ceil(minterAdmins.length * 0.4)
     console.warn(`Using 40% => ${minAdminCount}`)
   }
 
+  // if not enough adminYes votes, no invite button
   if (adminYes < minAdminCount) {
     console.warn(`Admin votes not high enough (have=${adminYes}, need=${minAdminCount}). No button.`)
     return null
   }
-  console.log(`passed initial button creation checks, pulling additional data...`)
-  
+  console.log(`passed initial button creation checks (adminYes >= ${minAdminCount})`)
+  // get user's address from 'creator' name
   const minterNameInfo = await getNameInfo(creator)
-  const minterAddress = await minterNameInfo.owner
+  if (!minterNameInfo || !minterNameInfo.owner) {
+    console.warn(`No valid nameInfo for ${creator}, skipping invite button.`)
+    return null
+  }
+  const minterAddress = minterNameInfo.owner
+  // fetch all final KICK/BAN tx
+  const { finalKickTxs, finalBanTxs } = await fetchAllKickBanTxData()
+  // check if there's a final (non-pending) KICK or BAN for this user
+  const priorKick = finalKickTxs.some(tx => tx.member === minterAddress)
+  const priorBan = finalBanTxs.some(tx => tx.offender === minterAddress)
+  const priorBanOrKick = (priorBan || priorKick)
+  console.warn(`PriorBanOrKick determination for ${minterAddress}:`, priorBanOrKick)
 
-  const previousBanTx = await searchTransactions({
-    txTypes: ['GROUP_BAN'],
-    address: `${minterAddress}`,
-    confirmationStatus: 'CONFIRMED',
-    limit: 0,
-    reverse: true,
-    offset: 0,
-    startBlock: 1990000,
-    blockLimit: 0,
-    txGroupId: 0,
-  })
-  const previousBan = previousBanTx.filter((tx) => tx.approvalStatus !== 'PENDING')
-  const previousKickTx = await searchTransactions({
-    txTypes: ['GROUP_KICK'],
-    address: `${minterAddress}`,
-    confirmationStatus: 'CONFIRMED',
-    limit: 0,
-    reverse: true,
-    offset: 0,
-    startBlock: 1990000,
-    blockLimit: 0,
-    txGroupId: 0,
-  })
-  const previousKick = previousKickTx.filter((tx) => tx.approvalStatus !== 'PENDING')
-  const priorBanOrKick = (previousKick.length > 0 || previousBan.length > 0)
-
-  console.warn(`PriorBanOrKick determination:`, priorBanOrKick)
-
-  const inviteButtonHtml = createInviteButtonHtml(creator, cardIdentifier)
+  // build the normal invite button & groupApprovalHtml
+  const inviteButtonHtml = isSomeTypaAdmin ? createInviteButtonHtml(creator, cardIdentifier) : ""
   const groupApprovalHtml = await checkGroupApprovalAndCreateButton(minterAddress, cardIdentifier, "GROUP_INVITE")
 
+  // if user had no prior KICK/BAN
   if (!priorBanOrKick) {
-    console.log(`No prior kick/ban found, creating invite (or approve) button...` )
+    console.log(`No prior kick/ban found, creating invite (or approve) button...`)
     console.warn(`Existing Numbers - adminYes/minAdminCount: ${adminYes}/${minAdminCount}`)
-    if (groupApprovalHtml){
+
+    // if there's already a pending GROUP_INVITE, return that approval button
+    if (groupApprovalHtml) {
       console.warn(`groupApprovalCheck found existing groupApproval, returning approval button instead of invite button...`)
       return groupApprovalHtml
     }
-    console.warn(`No pending approvals or prior kick/ban found, but votes are high enough, returning invite button...`)
+
+    console.warn(`No pending approvals or prior kick/ban found, returning invite button...`)
     return inviteButtonHtml
 
-  } else if (priorBanOrKick){  
-    console.warn(`Prior kick/ban found! Including BOTH buttons (due to complexities in checking, displaying both buttons is simpler than attempting to display only one)...`)
+  } else {
+    // priorBanOrKick is true => show both
+    console.warn(`Prior kick/ban found! Including BOTH buttons...`)
     return inviteButtonHtml + groupApprovalHtml
   }
 }
@@ -1540,12 +1545,13 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
     blockLimit: 0,
     txGroupId: 0 
   })
-  const pendingApprovals = await findPendingApprovalTxForAddress(address, transactionType);
+  const pendingApprovals = await findPendingApprovalTxForAddress(address, transactionType)
+  let isSomeTypaAdmin = userState.isAdmin || userState.isMinterAdmin
 
   // If no pending transaction found, return null
   if (!pendingApprovals || pendingApprovals.length === 0) {
     console.warn("no pending approval transactions found, returning null...")
-    return null;
+    return null
   }
   const txSig = pendingApprovals[0].signature
   // Among the already-confirmed GROUP_APPROVAL, filter for those referencing this txSig
@@ -1557,7 +1563,7 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
     getNameFromAddress
   )
 
-  if (transactionType === "GROUP_INVITE") {
+  if (transactionType === "GROUP_INVITE" && isSomeTypaAdmin) {
     const approvalButtonHtml = `
       <div style="display: flex; flex-direction: column; margin-top: 1em;">
         <p style="color: rgb(181, 214, 100);">
@@ -1587,7 +1593,7 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
     return approvalButtonHtml
   }
   
-  if (transactionType === "GROUP_KICK") {
+  if (transactionType === "GROUP_KICK" && isSomeTypaAdmin) {
     const approvalButtonHtml = `
       <div style="display: flex; flex-direction: column; margin-top: 1em;">
         <p style="color: rgb(199, 100, 64);">
@@ -1617,7 +1623,7 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
     return approvalButtonHtml
   }
   
-  if (transactionType === "GROUP_BAN") {
+  if (transactionType === "GROUP_BAN" && isSomeTypaAdmin) {
     const approvalButtonHtml = `
       <div style="display: flex; flex-direction: column; margin-top: 1em;">
         <p style="color: rgb(189, 40, 40);">
@@ -1647,7 +1653,7 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
     return approvalButtonHtml
   }
   
-  if (transactionType === "ADD_GROUP_ADMIN") {
+  if (transactionType === "ADD_GROUP_ADMIN" && isSomeTypaAdmin) {
     const approvalButtonHtml = `
       <div style="display: flex; flex-direction: column; margin-top: 1em;">
         <p style="color: rgb(40, 144, 189);">
@@ -1677,7 +1683,7 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
     return approvalButtonHtml
   }
   
-  if (transactionType === "REMOVE_GROUP_ADMIN") {
+  if (transactionType === "REMOVE_GROUP_ADMIN" && isSomeTypaAdmin) {
     const approvalButtonHtml = `
       <div style="display: flex; flex-direction: column; margin-top: 1em;">
         <p style="color: rgb(189, 40, 40);">
@@ -1709,7 +1715,7 @@ const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transa
   
 }
 
-async function buildApprovalTableHtml(approvalTxs, getNameFunc) {
+const buildApprovalTableHtml = async (approvalTxs, getNameFunc) => {
   // Build a Map of adminAddress => one transaction (to handle multiple approvals from same admin)
   const approvalMap = new Map()
   for (const tx of approvalTxs) {
@@ -1718,10 +1724,8 @@ async function buildApprovalTableHtml(approvalTxs, getNameFunc) {
       approvalMap.set(adminAddr, tx)
     }
   }
-
   // Turn the map into an array for iteration
   const approvalArray = Array.from(approvalMap, ([adminAddr, tx]) => ({ adminAddr, tx }))
-
   // Build table rows asynchronously, since we need getNameFromAddress
   const tableRows = await Promise.all(
     approvalArray.map(async ({ adminAddr, tx }) => {
@@ -1732,15 +1736,12 @@ async function buildApprovalTableHtml(approvalTxs, getNameFunc) {
         console.warn(`Error fetching name for ${adminAddr}:`, err)
         adminName = null
       }
-
       const displayName =
         adminName && adminName !== adminAddr
           ? adminName
           : "(No registered name)"
 
-      // Format the transaction timestamp
       const dateStr = new Date(tx.timestamp).toLocaleString()
-
       return `
         <tr>
           <td style="border: 1px solid rgb(255, 255, 255); padding: 4px; color: #234565">${displayName}</td>
@@ -1749,11 +1750,9 @@ async function buildApprovalTableHtml(approvalTxs, getNameFunc) {
       `
     })
   )
-
   // The total unique approvals = number of entries in approvalMap
   const uniqueApprovalCount = approvalMap.size;
-
-  // 4) Wrap the table in a container with horizontal scroll:
+  // Wrap the table in a container with horizontal scroll:
   //    1) max-width: 100% makes it fit the parent (card) width
   //    2) overflow-x: auto allows scrolling if the table is too wide
   const containerHtml = `
@@ -1771,7 +1770,6 @@ async function buildApprovalTableHtml(approvalTxs, getNameFunc) {
       </table>
     </div>
   `
-
   // Return both the container-wrapped table and the count of unique approvals
   return {
     tableHtml: containerHtml,
@@ -1887,7 +1885,7 @@ const getNewestCommentTimestamp = async (cardIdentifier) => {
 
 // Create the overall Minter Card HTML -----------------------------------------------
 const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCount, cardUpdatedTime, bgColor, address) => {
-  const { header, content, links, creator, timestamp, poll } = cardData
+  const { header, content, links, creator, creatorAddress, timestamp, poll } = cardData
   const formattedDate = cardUpdatedTime ? new Date(cardUpdatedTime).toLocaleString() : new Date(timestamp).toLocaleString()
   const avatarHtml = await getMinterAvatar(creator)
   const linksHTML = links.map((link, index) => `
@@ -1915,9 +1913,9 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
     const invites = await fetchGroupInvitesByAddress(address)
     const hasMinterInvite = invites.some((invite) => invite.groupId === 694)
     if (userVote === 0) {
-      finalBgColor = "rgba(0, 192, 0, 0.3)"; // or any green you want
+      finalBgColor = "rgba(1, 65, 39, 0.41)"; // or any green you want
     } else if (userVote === 1) {
-      finalBgColor = "rgba(192, 0, 0, 0.3)"; // or any red you want
+      finalBgColor = "rgba(107, 3, 3, 0.3)"; // or any red you want
     } else if (hasMinterInvite) {
       // If so, override background color & add an "INVITED" label
       finalBgColor = "black"; 
@@ -1926,7 +1924,7 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
         inviteHtmlAdd = `
           <div id="join-button-container-${cardIdentifier}" style="margin-top: 1em;">
             <button 
-                style="padding: 8px; background:rgb(37, 99, 44); color:rgb(240, 240, 240); border: 1px solid rgb(255, 255, 255); border-radius: 5px; cursor: pointer;"
+                style="padding: 8px; background: rgb(37, 99, 44); color:rgb(240, 240, 240); border: 1px solid rgb(255, 255, 255); border-radius: 5px; cursor: pointer;"
                 onmouseover="this.style.backgroundColor='rgb(25, 47, 39) '"
                 onmouseout="this.style.backgroundColor='rgb(37, 99, 44) '"
                 onclick="handleJoinGroup('${userState.accountAddress}')">
