@@ -782,7 +782,7 @@ const searchAllWithOffset = async (service, query, limit, offset, room) => {
 // NOTE - This function does a search and will return EITHER AN ARRAY OR A SINGLE OBJECT. if you want to guarantee a single object, pass 1 as limit. i.e. await searchSimple(service, identifier, "", 1) will return a single object.
 const searchSimple = async (service, identifier, name, limit=1500, offset=0, room='', reverse=true, prefixOnly=true, after=0) => {
     try {
-      let urlSuffix = `service=${service}&identifier=${identifier}&name=${name}&prefix=true&limit=${limit}&offset=${offset}&reverse=${reverse}&prefix=${prefixOnly}&fter=${after}`
+      let urlSuffix = `service=${service}&identifier=${identifier}&name=${name}&prefix=true&limit=${limit}&offset=${offset}&reverse=${reverse}&prefix=${prefixOnly}&after=${after}`
   
       if (name && !identifier && !room) {
         console.log('name only searchSimple', name)
@@ -1840,13 +1840,14 @@ const searchTransactions = async ({
     }
 }
 
-const searchPendingTransactions = async (limit = 20, offset = 0) => {
+const searchPendingTransactions = async (limit=20, offset=0, reverse=false) => {
     try {
       const queryParams = []
       if (limit) queryParams.push(`limit=${limit}`)
       if (offset) queryParams.push(`offset=${offset}`)
+      if (reverse) queryParams.push(`reverse=${reverse}`)
   
-      const queryString = queryParams.join('&');
+      const queryString = queryParams.join('&')
       const url = `${baseUrl}/transactions/pending${queryString ? `?${queryString}` : ''}`
   
       const response = await fetch(url, {
@@ -1855,11 +1856,11 @@ const searchPendingTransactions = async (limit = 20, offset = 0) => {
       })
   
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await response.text()
         throw new Error(`Failed to search pending transactions: HTTP ${response.status}, ${errorText}`)
       }
   
-      const result = await response.json();
+      const result = await response.json()
       if (!Array.isArray(result)) {
         throw new Error("Expected an array for pending transactions, but got something else.")
       }

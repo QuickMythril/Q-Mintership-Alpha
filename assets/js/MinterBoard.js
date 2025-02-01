@@ -1468,14 +1468,22 @@ const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) =>
   const minterAddress = minterNameInfo.owner
   // fetch all final KICK/BAN tx
   const { finalKickTxs, finalBanTxs } = await fetchAllKickBanTxData()
+  const { finalInviteTxs, pendingInviteTxs } = await fetchAllInviteTransactions()
   // check if there's a final (non-pending) KICK or BAN for this user
   const priorKick = finalKickTxs.some(tx => tx.member === minterAddress)
   const priorBan = finalBanTxs.some(tx => tx.offender === minterAddress)
+  const existingInvite = finalInviteTxs.some(tx => tx.invitee === minterAddress)
+  const pendingInvite = pendingInviteTxs.some(tx => tx.invitee === minterAddress)
   const priorBanOrKick = (priorBan || priorKick)
   console.warn(`PriorBanOrKick determination for ${minterAddress}:`, priorBanOrKick)
 
   // build the normal invite button & groupApprovalHtml
-  const inviteButtonHtml = isSomeTypaAdmin ? createInviteButtonHtml(creator, cardIdentifier) : ""
+  let inviteButtonHtml = ""
+  if (existingInvite || pendingInvite){
+    console.warn(`There is an EXISTING INVITE for this user! No invite button being created... existing: (${existingInvite}, pending: ${pendingInvite})`)
+    inviteButtonHtml = ''
+  }
+  inviteButtonHtml = isSomeTypaAdmin ? createInviteButtonHtml(creator, cardIdentifier) : ""
   const groupApprovalHtml = await checkGroupApprovalAndCreateButton(minterAddress, cardIdentifier, "GROUP_INVITE")
 
   // if user had no prior KICK/BAN
@@ -1501,7 +1509,7 @@ const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) =>
 
 const findPendingApprovalTxForAddress = async (address, txType, limit = 0, offset = 0) => {
   // 1) Fetch all pending transactions
-  const pendingTxs = await searchPendingTransactions(limit, offset)
+  const pendingTxs = await searchPendingTransactions(limit, offset, false)
   // if a txType is passed, return the results related to that type, if not, then return any pending tx of the potential types.
   let relevantTypes
   if (txType) {
@@ -1530,31 +1538,42 @@ const findPendingApprovalTxForAddress = async (address, txType, limit = 0, offse
     }
   })
   console.warn(`matchedTxs:`,matchedTxs)
-
+  //Sort oldest→newest by timestamp, so matchedTxs[0] is the oldest
+  matchedTxs.sort((a, b) => a.timestamp - b.timestamp)
   return matchedTxs // Array of matching pending transactions
 }
 
 const checkGroupApprovalAndCreateButton = async (address, cardIdentifier, transactionType) => {
+  // We are going to be verifying that the address isn't already a minter, before showing GROUP_APPROVAL buttons potentially...
+  if (transactionType === "GROUP_INVITE") {
+    console.log(`This is a GROUP_INVITE check for group approval... Checking that user isn't already a minter...`)
+    const minterMembers = await fetchMinterGroupMembers()
+    const minterGroupAddresses = minterMembers.map(m => m.member)
+    if (minterGroupAddresses.includes(address)) {
+      console.warn(`User is already a minter, will not be creating group_approval buttons`)
+      return null
+    }
+  }
+
   const approvalSearchResults = await searchTransactions({
     txTypes: ['GROUP_APPROVAL'],
     confirmationStatus: 'CONFIRMED',
     limit: 0,
-    reverse: true,
+    reverse: false,
     offset: 0,
     startBlock: 1990000,
     blockLimit: 0,
     txGroupId: 0 
   })
-  const pendingApprovals = await findPendingApprovalTxForAddress(address, transactionType)
+  const pendingApprovals = await findPendingApprovalTxForAddress(address, transactionType, 0, 0)
   let isSomeTypaAdmin = userState.isAdmin || userState.isMinterAdmin
-
   // If no pending transaction found, return null
   if (!pendingApprovals || pendingApprovals.length === 0) {
     console.warn("no pending approval transactions found, returning null...")
     return null
   }
   const txSig = pendingApprovals[0].signature
-  // Among the already-confirmed GROUP_APPROVAL, filter for those referencing this txSig
+  // Find the relevant signature. (First approval)
   const relevantApprovals = approvalSearchResults.filter(
     (approvalTx) => approvalTx.pendingSignature === txSig
   )

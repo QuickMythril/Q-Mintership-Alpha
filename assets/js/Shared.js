@@ -163,9 +163,9 @@ const fetchAllKickBanTxData = async () => {
       finalBanTxs,
       pendingBanTxs,
     }
-  }
+}
   
-  const partitionTransactions = (txSearchResults) => {
+const partitionTransactions = (txSearchResults) => {
     const finalTx = []
     const pendingTx = []
   
@@ -178,7 +178,31 @@ const fetchAllKickBanTxData = async () => {
     }
   
     return { finalTx, pendingTx };
-  }
+}
   
+const fetchAllInviteTransactions = async () => {
+    const inviteTxType = "GROUP_INVITE"
+  
+    const allInviteTx = await searchTransactions({
+        txTypes: [inviteTxType],
+        confirmationStatus: 'CONFIRMED',
+        limit: 0,
+        reverse: true,
+        offset: 0,
+        startBlock: 1990000,
+        blockLimit: 0,
+        txGroupId: 0,
+    })
+  
+    const { finalTx: finalInviteTxs, pendingTx: pendingInviteTxs } = partitionTransactions(allInviteTx)
+    
+    console.log('Final kickTxs:', finalInviteTxs)
+    console.log('Pending kickTxs:', pendingInviteTxs)
+  
+    return {
+      finalInviteTxs,
+      pendingInviteTxs,
+    }
+}
   
   

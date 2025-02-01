@@ -198,65 +198,6 @@ const loadAdminBoardPage = async () => {
   await fetchAllEncryptedCards()  
 }
 
-// const fetchAllKicKBanTxData = async () => {
-//   const kickTxType = "GROUP_KICK"
-//   const banTxType = "GROUP_BAN"
-
-//   // Helper function to filter transactions
-//   const filterTransactions = (rawTransactions) => {
-//     // Group transactions by member
-//     const memberTxMap = rawTransactions.reduce((map, tx) => {
-//       if (!map[tx.member]) {
-//         map[tx.member] = []
-//       }
-//       map[tx.member].push(tx)
-//       return map
-//     }, {})
-
-//     // Filter out members with both pending and non-pending transactions
-//     return Object.values(memberTxMap)
-//       .filter(txs => txs.every(tx => tx.approvalStatus !== 'PENDING'))
-//       .flat()
-//       // .filter((txs) => !(txs.some(tx => tx.approvalStatus === 'PENDING') &&
-//       //                    txs.some(tx => tx.approvalStatus !== 'PENDING')))
-//       // .flat()
-//   }
-
-//   // Fetch ban transactions
-//   const rawBanTransactions = await searchTransactions({
-//     txTypes: [banTxType],
-//     address: '',
-//     confirmationStatus: 'CONFIRMED',
-//     limit: 0,
-//     reverse: true,
-//     offset: 0,
-//     startBlock: 1990000,
-//     blockLimit: 0,
-//     txGroupId: 0,
-//   })
-
-//   // Filter transactions for bans
-//   banTransactions = filterTransactions(rawBanTransactions)
-//   console.warn('banTxData (filtered):', banTransactions)
-
-//   // Fetch kick transactions
-//   const rawKickTransactions = await searchTransactions({
-//     txTypes: [kickTxType],
-//     address: '',
-//     confirmationStatus: 'CONFIRMED',
-//     limit: 0,
-//     reverse: true,
-//     offset: 0,
-//     startBlock: 1990000,
-//     blockLimit: 0,
-//     txGroupId: 0,
-//   })
-
-//   // Filter transactions for kicks
-//   kickTransactions = filterTransactions(rawKickTransactions)
-//   console.warn('kickTxData (filtered):', kickTransactions)
-// }
-
 
 // Example: fetch and save admin public keys and count
 const updateOrSaveAdminGroupsDataLocally = async () => {
@@ -299,7 +240,7 @@ const loadOrFetchAdminGroupsData = async () => {
     adminMemberCount = parsedData.keysCount
     adminPublicKeys = parsedData.publicKeys
 
-    console.log(typeof adminPublicKeys); // Should be "object"
+    console.log(typeof adminPublicKeys) // Should be "object"
     console.log(Array.isArray(adminPublicKeys))
 
     console.log(`Loaded admins 'keysCount'=${adminMemberCount}, publicKeys=`, adminPublicKeys)
@@ -1221,7 +1162,6 @@ const handleBanMinter = async (minterName) => {
       alert(`No valid address found for minter name: ${minterName}, this should NOT have happened, please report to developers...`)
       return
     }
-
     const adminPublicKey = await getPublicKeyByName(userState.accountName)
     const reason = 'Banned by Minter Admins'
     const fee = 0.01 
@@ -1232,14 +1172,13 @@ const handleBanMinter = async (minterName) => {
       action: "SIGN_TRANSACTION",
       unsignedBytes: rawBanTransaction
     })
+
     if (!signedBanTransaction) {
       console.warn(`this only happens if the SIGN_TRANSACTION qortalRequest failed... are you using the legacy UI prior to this qortalRequest being added?`)
       alert(`this only happens if the SIGN_TRANSACTION qortalRequest failed... are you using the legacy UI prior to this qortalRequest being added? Please talk to developers.`)
       return
     }
-
     let txToProcess = signedBanTransaction
-
     const processedTx = await processTransaction(txToProcess)
 
     if (typeof processedTx === 'object') {
@@ -1304,6 +1243,18 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
       showTopic = false
     }
   }
+  let publishedMinterAddress = minterAddress
+
+  if (publishedMinterAddress === 'notYetAdded' || publishedMinterAddress === 'undefined' || publishedMinterAddress === null || !publishedMinterAddress) {
+    console.warn(`minterAddress is not published in the card data... will have to extract from minterName...`)
+    publishedMinterAddress = null
+  } else {
+    const publishedMinterAddressInfo = await getAddressInfo(publishedMinterAddress)
+    if (publishedMinterAddressInfo) {
+      console.log(`minterAddress found in published data, and verified. Using published address for further checks.`)
+      publishedMinterAddress = publishedMinterAddressInfo.address
+    }
+  }
  
   let cardColorCode = showTopic ? '#0e1b15' : '#151f28'
 
@@ -1329,7 +1280,7 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
   const verifiedName = await validateMinterName(minterName)
   let levelText = '</h3>'
   const addressVerification = await getAddressInfo(minterName)
-  const verifiedAddress = addressVerification.address 
+  const verifiedAddress = publishedMinterAddress ? publishedMinterAddress : addressVerification.address 
 
   if (verifiedName || verifiedAddress) {
     let accountInfo
@@ -1337,7 +1288,7 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
       accountInfo = await getNameInfo(verifiedName)
     }
       
-    const accountAddress = verifiedAddress ?  addressVerification.address : accountInfo.owner
+    const accountAddress = verifiedAddress ? addressVerification.address : accountInfo.owner
     const addressInfo =  verifiedAddress ? addressVerification : await getAddressInfo(accountAddress)
     const minterGroupAddresses = minterGroupMembers.map(m => m.member)
     const adminAddresses = minterAdmins.map(m => m.member)
@@ -1398,34 +1349,6 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
         return ''
       }
     }
-    
-    // if (banTransactions.some((banTx) => banTx.groupId === 694 && banTx.offender === accountAddress)){
-    //   console.warn(`account was already banned, displaying as such...`)
-    //   cardColorCode = 'rgb(24, 3, 3)'
-    //   altText  = `<h4 style="color:rgb(106, 2, 2); margin-bottom: 0.5em;">BANNED From MINTER Group</h4>`
-    //   showRemoveHtml = ''
-    //   if (!adminBoardState.bannedCards.has(cardIdentifier)){
-    //     adminBoardState.bannedCards.add(cardIdentifier)
-    //   }
-    //   if (!showKickedBanned){
-    //     console.warn(`kick/bank checkbox is unchecked, and card is banned, not displaying...`)
-    //     return ''
-    //   }
-    // }
-    
-    // if (kickTransactions.some((kickTx) => kickTx.groupId === 694 && kickTx.member === accountAddress)){
-    //   console.warn(`account was already kicked, displaying as such...`)
-    //   cardColorCode = 'rgb(29, 7, 4)'
-    //   altText  = `<h4 style="color:rgb(143, 117, 21); margin-bottom: 0.5em;">KICKED From MINTER Group</h4>`
-    //   showRemoveHtml = ''
-    //   if (!adminBoardState.kickedCards.has(cardIdentifier)){
-    //     adminBoardState.kickedCards.add(cardIdentifier)
-    //   }
-    //   if (!showKickedBanned) {
-    //     console.warn(`kick/ban checkbox is unchecked, card is kicked, not displaying...`)
-    //     return ''
-    //   }
-    // }
     
   } else {
     console.log(`name could not be validated, assuming topic card (or some other issue with name validation) for removalActions`)
