@@ -1534,7 +1534,7 @@ const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) =>
   // fetch all final KICK/BAN tx
   const { finalKickTxs, finalBanTxs } = await fetchAllKickBanTxData()
   const { finalInviteTxs, pendingInviteTxs } = await fetchAllInviteTransactions()
-  // check if there's a final (non-pending) KICK or BAN for this user
+  // check if there's a KICK or BAN for this user.
   const priorKick = finalKickTxs.some(tx => tx.member === minterAddress)
   const priorBan = finalBanTxs.some(tx => tx.offender === minterAddress)
   const existingInvite = finalInviteTxs.some(tx => tx.invitee === minterAddress)
@@ -1545,10 +1545,12 @@ const checkAndDisplayInviteButton = async (adminYes, creator, cardIdentifier) =>
   // build the normal invite button & groupApprovalHtml
   let inviteButtonHtml = ""
   if (existingInvite || pendingInvite){
-    console.warn(`There is an EXISTING INVITE for this user! No invite button being created... existing: (${existingInvite}, pending: ${pendingInvite})`)
+    console.warn(`There is an EXISTING or PENDING INVITE for this user! No invite button being created... existing: (${existingInvite}, pending: ${pendingInvite})`)
     inviteButtonHtml = ''
+  } else {
+    inviteButtonHtml = isSomeTypaAdmin ? createInviteButtonHtml(creator, cardIdentifier) : ""
   }
-  inviteButtonHtml = isSomeTypaAdmin ? createInviteButtonHtml(creator, cardIdentifier) : ""
+  
   const groupApprovalHtml = await checkGroupApprovalAndCreateButton(minterAddress, cardIdentifier, "GROUP_INVITE")
 
   // if user had no prior KICK/BAN

@@ -1078,7 +1078,7 @@ const createRemoveButtonHtml = (name, cardIdentifier) => {
 
 const handleKickMinter = async (minterName) => {
   try {
-    isAddress = await getAddressInfo(minterName)
+    let isAddress = await getAddressInfo(minterName)
 
     // Optional block check
     let txGroupId = 0
@@ -1091,7 +1091,7 @@ const handleKickMinter = async (minterName) => {
 
     // Get the minter address from name info
     let minterAddress
-    if (!isAddress){
+    if (!isAddress.address || !isAddress.address != minterName){
       const minterNameInfo = await getNameInfo(minterName)
       minterAddress = minterNameInfo?.owner
     } else {
@@ -1107,7 +1107,7 @@ const handleKickMinter = async (minterName) => {
     const reason = 'Kicked by Minter Admins'
     const fee = 0.01
 
-    const rawKickTransaction = await createGroupKickTransaction(minterAddress, adminPublicKey, 694, minterAddress, reason, txGroupId, fee)
+    const rawKickTransaction = await createGroupKickTransaction(adminPublicKey, 694, minterAddress, reason, txGroupId, fee)
 
     const signedKickTransaction = await qortalRequest({
       action: "SIGN_TRANSACTION",
@@ -1138,7 +1138,7 @@ const handleKickMinter = async (minterName) => {
 }
 
 const handleBanMinter = async (minterName) => {
-  isAddress = await getAddressInfo(minterName)
+  let isAddress = await getAddressInfo(minterName)
   try {
     let txGroupId = 0
     // const { height: currentHeight } = await getLatestBlockInfo()
@@ -1151,9 +1151,9 @@ const handleBanMinter = async (minterName) => {
       txGroupId = 694
     }
     let minterAddress
-    if (!isAddress) {
+    if (!isAddress.address || !isAddress.address != minterName){
       const minterNameInfo = await getNameInfo(minterName)
-      const minterAddress = minterNameInfo?.owner
+      minterAddress = minterNameInfo?.owner
     } else {
       minterAddress = minterName
     }

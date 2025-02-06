@@ -224,6 +224,12 @@ const getUserAddress = async () => {
 }
 
 const getAddressInfo = async (address) => {
+    const qortalAddressPattern = /^Q[A-Za-z0-9]{33}$/  // Q + 33 almum = 34 total length
+
+    if (!qortalAddressPattern.test(address)) {
+        console.warn(`Not a valid Qortal address format, returning same thing that was passed to not break other functions: ${address}`)
+        return address
+    }
     try {
         const response = await fetch (`${baseUrl}/addresses/${address}`, {
             headers: { 'Accept': 'application/json' },
@@ -1395,16 +1401,16 @@ const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, gr
     }
 }
 
-const createGroupKickTransaction = async (recipientAddress, adminPublicKey, groupId=694, member, reason='Kicked by admins', txGroupId, fee) => {
+const createGroupKickTransaction = async (adminPublicKey, groupId=694, member, reason='Kicked by admins', txGroupId=694, fee=0.01) => {
 
     try {
         // Fetch account reference correctly
-        const accountInfo = await getAddressInfo(recipientAddress)
+        const accountInfo = await getAddressInfo(member)
         const accountReference = accountInfo.reference
 
         // Validate inputs before making the request
-        if (!adminPublicKey || !accountReference || !recipientAddress) {
-            throw new Error("Missing required parameters for group invite transaction.")
+        if (!adminPublicKey || !accountReference || !member) {
+            throw new Error("Missing required parameters for group kick transaction.")
         }
 
         const payload = {
@@ -1412,11 +1418,10 @@ const createGroupKickTransaction = async (recipientAddress, adminPublicKey, grou
             reference: accountReference, 
             fee,
             txGroupId, 
-            recipient: null, 
             adminPublicKey, 
-            groupId: groupId, 
-            member: member || recipientAddress, 
-            reason: reason
+            groupId,
+            member,
+            reason
         }
 
         console.log("Sending GROUP_KICK transaction payload:", payload)
