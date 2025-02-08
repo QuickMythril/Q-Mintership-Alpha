@@ -792,18 +792,20 @@ const searchSimple = async (service, identifier, name, limit=1500, offset=0, roo
   
       if (name && !identifier && !room) {
         console.log('name only searchSimple', name)
-        urlSuffix = `service=${service}&name=${name}&limit=${limit}&prefix=true&reverse=${reverse}`
+        urlSuffix = `service=${service}&name=${name}&limit=${limit}&prefix=true&reverse=${reverse}&after=${after}`
+        console.log(`urlSuffix used: ${urlSuffix}`)
 
       } else if (!name && identifier && !room) {
         console.log('identifier only searchSimple', identifier)
-        urlSuffix = `service=${service}&identifier=${identifier}&limit=${limit}&prefix=true&reverse=${reverse}`
+        urlSuffix = `service=${service}&identifier=${identifier}&limit=${limit}&prefix=true&reverse=${reverse}&after=${after}`
+        console.log(`urlSuffix used: ${urlSuffix}`)
 
       } else if (!name && !identifier && !room) {
         console.error(`name: ${name} AND identifier: ${identifier} not passed. Must include at least one...`)
         return null 
         
       } else {
-        console.log(`final searchSimple params = service: '${service}', identifier: '${identifier}', name: '${name}', limit: '${limit}', offset: '${offset}', room: '${room}', reverse: '${reverse}'`)
+        console.log(`final searchSimple params = service: '${service}', identifier: '${identifier}', name: '${name}', limit: '${limit}', offset: '${offset}', room: '${room}', reverse: '${reverse}', after: ${after}`)
       }
 
       const response = await fetch(`${baseUrl}/arbitrary/resources/searchsimple?${urlSuffix}`, {
