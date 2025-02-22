@@ -814,7 +814,6 @@ const loadCardIntoForm = async (cardData) => {
 
 // Main function to publish a new Minter Card -----------------------------------------------
 const publishCard = async (cardIdentifierPrefix) => {
-
   const minterGroupData = await fetchMinterGroupMembers()
   const minterGroupAddresses = minterGroupData.map(m => m.member)
   const userAddress = userState.accountAddress
@@ -823,6 +822,7 @@ const publishCard = async (cardIdentifierPrefix) => {
     alert("You are already a Minter and cannot publish a new card!")
     return
   }
+
   const header = document.getElementById("card-header").value.trim()
   const content = document.getElementById("card-content").value.trim()
   const links = Array.from(document.querySelectorAll(".card-link"))
@@ -834,8 +834,27 @@ const publishCard = async (cardIdentifierPrefix) => {
     return
   }
 
-  const cardIdentifier = isExistingCard ? existingCardIdentifier : `${cardIdentifierPrefix}-${await uid()}`
-  const pollName = `${cardIdentifier}-poll`
+  if (isExistingCard) {
+    if (!existingCardData || Object.keys(existingCardData).length === 0) {
+      const fetched = await fetchExistingCard(cardIdentifierPrefix) 
+      if (fetched) {
+        existingCardData = fetched
+      } else {
+        console.warn("fetchExistingCard returned null. Possibly no existing card found.")
+      }
+    }
+  }
+
+  const cardIdentifier = isExistingCard && existingCardIdentifier
+    ? existingCardIdentifier
+    : `${cardIdentifierPrefix}-${await uid()}`
+
+  let existingPollName
+  if (existingCardData && existingCardData.poll) {
+    existingPollName = existingCardData.poll
+  }
+
+  const pollName = existingPollName || `${cardIdentifier}-poll`
   const pollDescription = `Mintership Board Poll for ${userState.accountName}`
 
   const cardData = {
@@ -845,16 +864,16 @@ const publishCard = async (cardIdentifierPrefix) => {
     creator: userState.accountName,
     creatorAddress: userState.accountAddress,
     timestamp: Date.now(),
-    poll: pollName,
+    poll: pollName // either the existing poll or a new one
   }
-  
+
   try {
     let base64CardData = await objectToBase64(cardData)
-      if (!base64CardData) {
-        console.log(`initial base64 object creation with objectToBase64 failed, using btoa...`)
-        base64CardData = btoa(JSON.stringify(cardData))
-      }
-    
+    if (!base64CardData) {
+      console.log(`initial base64 object creation with objectToBase64 failed, using btoa...`)
+      base64CardData = btoa(JSON.stringify(cardData))
+    }
+
     await qortalRequest({
       action: "PUBLISH_QDN_RESOURCE",
       name: userState.accountName,
@@ -863,7 +882,7 @@ const publishCard = async (cardIdentifierPrefix) => {
       data64: base64CardData,
     })
 
-    if (!isExistingCard){
+    if (!isExistingCard || !existingPollName) {
       await qortalRequest({
         action: "CREATE_POLL",
         pollName,
@@ -871,25 +890,32 @@ const publishCard = async (cardIdentifierPrefix) => {
         pollOptions: ['Yes, No'],
         pollOwnerAddress: userState.accountAddress,
       })
-      alert("Card and poll published successfully!")
+      if (!isExistingCard) {
+        alert("Card and poll published successfully!")
+      } else {
+        alert("Existing card updated, and new poll created (since existing poll was missing)!")
+      }
+    } else {
+      alert("Card updated successfully! (No poll updates possible)")
     }
 
-    if (isExistingCard){
-      alert("Card Updated Successfully! (No poll updates possible)")
+    if (isExistingCard) {
       isExistingCard = false
+      existingCardData = {}
     }
 
     document.getElementById("publish-card-form").reset()
     document.getElementById("publish-card-view").style.display = "none"
     document.getElementById("cards-container").style.display = "flex"
+
     await loadCards(minterCardIdentifierPrefix)
 
   } catch (error) {
-
     console.error("Error publishing card or poll:", error)
     alert("Failed to publish card and poll.")
   }
 }
+
 
 let globalVoterMap = new Map()
 
