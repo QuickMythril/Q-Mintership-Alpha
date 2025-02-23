@@ -25,49 +25,99 @@ const loadMinterBoardPage = async () => {
   const publishButtonColor = '#527c9d'
   const minterBoardNameColor = '#527c9d'
   mainContent.innerHTML = `
-    <div class="minter-board-main" style="padding: 20px; text-align: center;">
-      <h1 style="color: ${minterBoardNameColor};">Minter Board</h1>
-      <p style="font-size: 1.25em;"> Publish a Minter Card with Information, and obtain and view the support of the community. Welcome to the Minter Board!</p>
-      <button id="publish-card-button" class="publish-card-button" style="margin: 20px; padding: 10px; background-color: ${publishButtonColor}">Publish Minter Card</button>
-      <button id="refresh-cards-button" class="refresh-cards-button" style="padding: 10px;">Refresh Cards</button>
-      <select id="sort-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color:rgb(38, 106, 106); background-color: black;">
-        <option value="newest" selected>Sort by Date</option>
-        <option value="name">Sort by Name</option>
-        <option value="recent-comments">Newest Comments</option>
-        <option value="least-votes">Least Votes</option>
-        <option value="most-votes">Most Votes</option>
-      </select>
-      <span id="board-card-counter" style="font-size: 1rem; color: #999ccc; padding: 0.5em;"></span>
-      <select id="time-range-select" style="margin-left: 10px; padding: 5px; font-size: 1.25rem; color: white; background-color: black;">
-        <option value="0">All Creation Dates</option>
-        <option value="1">Last 1 Day</option>
-        <option value="7">Last 7 Days</option>
-        <option value="30">...Within 30 Days</option>
-        <option value="45" selected>Published Within Last 45 Days</option>
-        <option value="60">...Within 60 Days</option>
-        <option value="90">...Within 90 Days</option>
-      </select>
-      <label style="color:rgb(181, 181, 181); margin-left: 10px;">
-      <input type="checkbox" id="show-existing-checkbox" />
-      Show Existing Minter Cards (history)
-      </label>
-      <div id="cards-container" class="cards-container" style="margin-top: 20px;"></div>
-      <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 20px;">
-        <form id="publish-card-form" class="publish-card-form">
-          <h3>Create or Update Your Card</h3>
-          <label for="card-header">Header:</label>
-          <input type="text" id="card-header" maxlength="100" placeholder="Enter card header" required>
-          <label for="card-content">Content:</label>
-          <textarea id="card-content" placeholder="Enter detailed information about why you would like to be a minter... the more the better, and links to things you have published on QDN will help a lot! Give the Minter Admins things to make decisions by!" required></textarea>
-          <label for="card-links">Links (qortal://...):</label>
-          <div id="links-container">
-            <input type="text" class="card-link" placeholder="Enter QDN link">
+    <div class="minter-board-main" style="padding: 0.5vh; text-align: center;">
+  
+      <!-- Board Title + Intro -->
+      <h1 style="color: #527c9d;">The Minter Board</h1>
+      <p style="font-size: 1.2em; color:rgb(85, 119, 101)">
+        The Minter Board is where Minting Rights are Delegated.
+      </p>
+      <p style="font-size: 1.1em; color:rgb(85, 119, 119)">
+        To obtain minting rights, click 'PUBLISH CARD' and create your card. A subsequent vote will approve/deny your card. 
+      </p>
+      <p>
+        After your card has received the necessary invite, return to the card and click the Join Group button to join the MINTER group.
+        (A Detailed how-to guide will be coming soon.) 
+      </p>
+
+      <div class="card-display-options">
+        <!-- Centered heading -->
+        <h4 class="options-heading"style="color: #527c9d;">CARD DISPLAY OPTIONS</h4>
+
+        <!-- A flex container for all the controls (sort, time range, checkbox) -->
+        <div class="options-row">
+          <!-- Sort by -->
+          <label for="sort-select" class="options-label">Sort By:</label>
+          <select id="sort-select" class="options-select">
+            <option value="newest" selected>Date</option>
+            <option value="name">Name</option>
+            <option value="recent-comments">Newest Comments</option>
+            <option value="least-votes">Least Votes</option>
+            <option value="most-votes">Most Votes</option>
+          </select>
+
+          <!-- Time range -->
+          <label for="time-range-select" class="options-label">Show Cards:</label>
+          <select id="time-range-select" class="options-select">
+            <option value="0">Show ALL Cards Published</option>
+            <option value="1">...Within Last 1 Day</option>
+            <option value="7">...Within Last 7 Days</option>
+            <option value="30">...Within 30 Days</option>
+            <option value="45" selected>Published Within Last 45 Days</option>
+            <option value="60">...Within 60 Days</option>
+            <option value="90">...Within 90 Days</option>
+          </select>
+
+          <!-- Show existing checkbox -->
+          <label class="options-check">
+            <input type="checkbox" id="show-existing-checkbox" />
+            Show Existing Minter Cards (History)
+          </label>
+        </div>
+        </div>
+        <!-- Card counter heading centered, with actual counter below if desired -->
+        <div style="margin-bottom: 1em;">
+          <div style="text-align: center; margin-top: 0.5em;">
+            <span id="board-card-counter" style="font-size: 1rem; color:rgb(153, 203, 204); padding: 0.5em;">
+              <!-- e.g. "5 cards found" -->
+            </span>
           </div>
-          <button type="button" id="add-link-button">Add Another Link</button>
-          <button type="submit" id="submit-publish-button">Publish Card</button>
-          <button type="button" id="cancel-publish-button">Cancel</button>
-        </form>
-      </div>
+        </div>
+
+        <!-- Row for Publish / Refresh actions -->
+        <div class="card-actions" style="margin-bottom: 1em;">
+          <button id="publish-card-button" class="publish-card-button">
+            PUBLISH CARD
+          </button>
+          <button id="refresh-cards-button" class="refresh-cards-button"
+            style="padding: 1vh;">
+            REFRESH CARDS
+          </button>
+        </div>
+
+        <!-- Container for displayed cards -->
+        <div id="cards-container" class="cards-container" style="margin-top: 2vh;"></div>
+
+        <!-- Hidden Publish Card Form -->
+        <div id="publish-card-view" class="publish-card-view" style="display: none; text-align: left; padding: 2vh;">
+          <form id="publish-card-form" class="publish-card-form">
+            <h3>Create or Update Your Card</h3>
+            <label for="card-header">Header:</label>
+            <input type="text" id="card-header" maxlength="100" placeholder="Enter card header" required>
+
+            <label for="card-content">Content:</label>
+            <textarea id="card-content" placeholder="Enter detailed information about why you would like to be a minter... the more the better..." required>
+            </textarea>
+
+            <label for="card-links">Links (qortal://...):</label>
+            <div id="links-container">
+              <input type="text" class="card-link" placeholder="Enter QDN link">
+            </div>
+            <button type="button" id="add-link-button">Add Another Link</button>
+            <button type="submit" id="submit-publish-button">Publish Card</button>
+            <button type="button" id="cancel-publish-button">Cancel</button>
+          </form>
+        </div>
     </div>
   `
   document.body.appendChild(mainContent)
