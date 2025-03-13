@@ -209,16 +209,24 @@ const loadMinterBoardPage = async () => {
       await loadCards(minterCardIdentifierPrefix)
     })
   }
-  // Initialize Cached Minter Group and Minter Admins
-  const [minterGroup, minterAdmins] = await Promise.all([
-    fetchMinterGroupMembers(),
-    fetchMinterGroupAdmins()
-  ])
-  cachedMinterAdmins = minterAdmins
-  cachedMinterGroup = minterGroup
+ //Initialize Minter Group and Admin Group
+  await initializeCachedGroups()
  
   await featureTriggerCheck()
   await loadCards(minterCardIdentifierPrefix)
+}
+
+const initializeCachedGroups = async () => {
+  try {
+    const [minterGroup, minterAdmins] = await Promise.all([
+      fetchMinterGroupMembers(),
+      fetchMinterGroupAdmins()
+    ])
+    cachedMinterGroup = minterGroup
+    cachedMinterAdmins = minterAdmins
+  } catch (error) {
+    console.error("Error initializing cached groups:", error)
+  }
 }
 
 
@@ -453,6 +461,9 @@ const processARBoardCards = async (allValidCards) => {
 
 //Main function to load the Minter Cards ----------------------------------------
 const loadCards = async (cardIdentifierPrefix) => {
+  if ((!cachedMinterGroup || cachedMinterGroup.length === 0) || (!cachedMinterAdmins || cachedMinterAdmins.length === 0)) {
+    await initializeCachedGroups()
+  }
   const cardsContainer = document.getElementById("cards-container")
   cardsContainer.innerHTML = "<p>Loading cards...</p>"
 
