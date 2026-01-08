@@ -1092,7 +1092,7 @@ const handleKickMinter = async (minterName) => {
 
     // Get the minter address from name info
     let minterAddress
-    if (!isAddress.address || !isAddress.address != minterName){
+    if (!isAddress.address || isAddress.address !== minterName){
       const minterNameInfo = await getNameInfo(minterName)
       minterAddress = minterNameInfo?.owner
     } else {
@@ -1104,7 +1104,7 @@ const handleKickMinter = async (minterName) => {
       return
     }
 
-    const adminPublicKey = await getPublicKeyByName(userState.accountName)
+    const adminPublicKey = await getPublicKeyFromAddress(userState.accountAddress)
     const reason = 'Kicked by Minter Admins'
     const fee = 0.01
 
@@ -1152,7 +1152,7 @@ const handleBanMinter = async (minterName) => {
       txGroupId = 694
     }
     let minterAddress
-    if (!isAddress.address || !isAddress.address != minterName){
+    if (!isAddress.address || isAddress.address !== minterName){
       const minterNameInfo = await getNameInfo(minterName)
       minterAddress = minterNameInfo?.owner
     } else {
@@ -1163,7 +1163,7 @@ const handleBanMinter = async (minterName) => {
       alert(`No valid address found for minter name: ${minterName}, this should NOT have happened, please report to developers...`)
       return
     }
-    const adminPublicKey = await getPublicKeyByName(userState.accountName)
+    const adminPublicKey = await getPublicKeyFromAddress(userState.accountAddress)
     const reason = 'Banned by Minter Admins'
     const fee = 0.01 
 
@@ -1408,4 +1408,3 @@ const createEncryptedCardHTML = async (cardData, pollResults, cardIdentifier, co
   </div>
   `
 }
-

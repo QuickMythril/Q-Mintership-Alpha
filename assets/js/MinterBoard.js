@@ -2028,7 +2028,7 @@ const handleGroupApproval = async (pendingSignature) => {
       return
     }
     const fee = 0.01
-    const adminPublicKey = await getPublicKeyByName(userState.accountName)
+    const adminPublicKey = await getPublicKeyFromAddress(userState.accountAddress)
     const txGroupId = 0
     const rawGroupApprovalTransaction = await createGroupApprovalTransaction(adminPublicKey, pendingSignature, txGroupId, fee)
     const signedGroupApprovalTransaction = await qortalRequest({
@@ -2247,4 +2247,3 @@ const createCardHTML = async (cardData, pollResults, cardIdentifier, commentCoun
   </div>
   `
 }
-

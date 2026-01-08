@@ -51,14 +51,14 @@ const randomID = () => {
 // Turn a unix timestamp into a human-readable date
 const timestampToHumanReadableDate = async(timestamp) => {
     const date = new Date(timestamp)
-    const day = date.getDate()
-    const month = date.getMonth() + 1
+    const day = String(date.getDate()).padStart(2, '0')
+    const month = String(date.getMonth() + 1).padStart(2, '0')
     const year = date.getFullYear()
-    const hours = date.getHours()
+    const hours = String(date.getHours()).padStart(2, '0')
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const seconds = String(date.getSeconds()).padStart(2, '0');
 
-    const formattedDate = `${day}.${month}.${year}..@${hours}:${minutes}:${seconds}`
+    const formattedDate = `${year}-${month}-${day} @ ${hours}:${minutes}:${seconds}`
     console.log('Formatted date:', formattedDate)
     return formattedDate
 }
@@ -1463,8 +1463,8 @@ const createGroupInviteTransaction = async (recipientAddress, adminPublicKey, gr
 const createGroupKickTransaction = async (adminPublicKey, groupId=694, member, reason='Kicked by admins', txGroupId=694, fee=0.01) => {
 
     try {
-        // Fetch account reference correctly
-        const accountInfo = await getAddressInfo(member)
+        const adminAddress = await getAddressFromPublicKey(adminPublicKey)
+        const accountInfo = await getAddressInfo(adminAddress)
         const accountReference = accountInfo.reference
 
         // Validate inputs before making the request
@@ -1673,13 +1673,13 @@ const createGroupApprovalTransaction = async (adminPublicKey, pendingSignature, 
 const createGroupBanTransaction = async (recipientAddress, adminPublicKey, groupId=694, offender, reason='Banned by admins', txGroupId, fee) => {
 
     try {
-        // Fetch account reference correctly
-        const accountInfo = await getAddressInfo(recipientAddress)
+        const adminAddress = await getAddressFromPublicKey(adminPublicKey)
+        const accountInfo = await getAddressInfo(adminAddress)
         const accountReference = accountInfo.reference
 
         // Validate inputs before making the request
-        if (!adminPublicKey || !accountReference || !recipientAddress) {
-            throw new Error("Missing required parameters for group invite transaction.")
+        if (!adminPublicKey || !accountReference || !offender) {
+            throw new Error("Missing required parameters for group ban transaction.")
         }
 
         const payload = {
@@ -1907,9 +1907,9 @@ const searchTransactions = async ({
 const searchPendingTransactions = async (limit=20, offset=0, reverse=false) => {
     try {
       const queryParams = []
-      if (limit) queryParams.push(`limit=${limit}`)
-      if (offset) queryParams.push(`offset=${offset}`)
-      if (reverse) queryParams.push(`reverse=${reverse}`)
+      if (limit !== undefined) queryParams.push(`limit=${limit}`)
+      if (offset !== undefined) queryParams.push(`offset=${offset}`)
+      if (reverse !== undefined) queryParams.push(`reverse=${reverse}`)
   
       const queryString = queryParams.join('&')
       const url = `${baseUrl}/transactions/pending${queryString ? `?${queryString}` : ''}`
